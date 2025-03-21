@@ -1,139 +1,69 @@
-import sqlite3
+# ubs.py
 import streamlit as st
+from supabase_client import supabase
 
-# Função para criar a tabela de UBS, caso ainda não exista
-def create_ubs_table():
-    with sqlite3.connect('chamados.db') as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS ubs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome_ubs TEXT UNIQUE
-            )
-        ''')
-        conn.commit()
-
-# Função para adicionar uma nova UBS
-def add_ubs(nome_ubs):
-    with sqlite3.connect('chamados.db') as conn:
-        cursor = conn.cursor()
-        try:
-            # Verifica se a UBS já existe
-            cursor.execute("INSERT OR IGNORE INTO ubs (nome_ubs) VALUES (?)", (nome_ubs,))
-            conn.commit()
-            if cursor.rowcount == 0:
-                # Se não houve alteração, significa que a UBS já existe
-                return False
-            return True
-        except sqlite3.IntegrityError:
-            return False
-
-# Função para listar todas as UBSs cadastradas
 def get_ubs_list():
-    with sqlite3.connect('chamados.db') as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT nome_ubs FROM ubs")
-        ubs_list = cursor.fetchall()
-    return [ubs[0] for ubs in ubs_list]
+    try:
+        resp = supabase.table("ubs").select("nome_ubs").execute()
+        return [u["nome_ubs"] for u in resp.data] if resp.data else []
+    except Exception as e:
+        st.error("Erro ao recuperar UBSs.")
+        print(f"Erro: {e}")
+        return []
 
-# Função para remover uma UBS
+def add_ubs(nome_ubs):
+    try:
+        supabase.table("ubs").insert({"nome_ubs": nome_ubs}).execute()
+        return True
+    except Exception as e:
+        print(f"Erro ao adicionar UBS: {e}")
+        return False
+
 def remove_ubs(nome_ubs):
-    with sqlite3.connect('chamados.db') as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM ubs WHERE nome_ubs = ?", (nome_ubs,))
-        conn.commit()
-        return cursor.rowcount > 0
+    try:
+        supabase.table("ubs").delete().eq("nome_ubs", nome_ubs).execute()
+        return True
+    except Exception as e:
+        print(f"Erro ao remover UBS: {e}")
+        return False
 
-# Função para atualizar o nome de uma UBS
 def update_ubs(old_name, new_name):
-    with sqlite3.connect('chamados.db') as conn:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE ubs SET nome_ubs = ? WHERE nome_ubs = ?", (new_name, old_name))
-        conn.commit()
-        return cursor.rowcount > 0
+    try:
+        supabase.table("ubs").update({"nome_ubs": new_name}).eq("nome_ubs", old_name).execute()
+        return True
+    except Exception as e:
+        print(f"Erro ao atualizar UBS: {e}")
+        return False
 
-# Inicializar algumas UBSs no banco de dados
-def initialize_ubs():
-    # Certifique-se de que a tabela UBS está criada
-    create_ubs_table()
-
-    # Lista de UBSs iniciais que queremos cadastrar
-    ubs_iniciais = [
-        "UBS Arapari/Cabeceiras", "UBS Assunçao", "UBS Flores", "UBS Baleia",
-        "UBS Barrento", "UBS Bastioes", "UBS Bela Vista", "UBS Betania",
-        "UBS Boa Vista", "UBS Cacimbas", "UBS Calugi", "UBS Centro",
-        "UBS Coqueiro", "UBS Cruzeiro/Maranhao", "UBS Deserto/Mangueira",
-        "UBS Encruzilhadas", "UBS Estaçao", "UBS Fazendinha", "UBS Ipu/Mazagao",
-        "UBS Jacare", "UBS Ladeira", "UBS Lagoa da Cruz", "UBS Lagoa das Merces",
-        "UBS Livramento", "UBS Maceio", "UBS Madalenas", "UBS Marinheiros",
-        "UBS Mourao", "UBS Mulatao", "UBS Picos", "UBS Salgado dos Pires",
-        "UBS Sitio do Meio", "UBS Tabocal", "UBS Taboca", "UBS Vida Nova Vida Bela",
-        "UBS Nova Aldeota", "UBS Violete", "UBS Violete II"
-    ]
-
-    # Adicionar UBSs iniciais, se ainda não existirem
-    for ubs in ubs_iniciais:
-        add_ubs(ubs)
-
-# Função para exibir e gerenciar UBSs usando Streamlit
 def manage_ubs():
-    st.subheader('Gerenciar UBSs')
-
-    action = st.selectbox('Selecione uma ação:', ['Listar UBSs', 'Adicionar UBS', 'Editar UBS', 'Remover UBS'])
-
-    if action == 'Listar UBSs':
-        ubs_list = get_ubs_list()
-        if ubs_list:
-            st.write('UBSs cadastradas:')
-            for ubs in ubs_list:
-                st.write(f"- {ubs}")
-        else:
-            st.write('Nenhuma UBS cadastrada.')
-
-    elif action == 'Adicionar UBS':
-        nome_ubs = st.text_input('Nome da UBS')
-        if st.button('Adicionar'):
-            if nome_ubs:
-                if add_ubs(nome_ubs):
-                    st.success(f"UBS '{nome_ubs}' adicionada com sucesso.")
-                else:
-                    st.warning(f"UBS '{nome_ubs}' já está cadastrada.")
+    st.subheader("Gerenciar UBSs")
+    action = st.selectbox("Ação", ["Listar", "Adicionar", "Editar", "Remover"])
+    if action == "Listar":
+        ubs = get_ubs_list()
+        st.write(ubs if ubs else "Nenhuma UBS cadastrada.")
+    elif action == "Adicionar":
+        nome = st.text_input("Nome da UBS")
+        if st.button("Adicionar") and nome:
+            if add_ubs(nome):
+                st.success("UBS adicionada!")
             else:
-                st.error('Por favor, insira o nome da UBS.')
-
-    elif action == 'Editar UBS':
-        ubs_list = get_ubs_list()
-        if ubs_list:
-            old_name = st.selectbox('Selecione a UBS para editar:', ubs_list)
-            new_name = st.text_input('Novo nome da UBS', value=old_name)
-            if st.button('Atualizar'):
-                if new_name:
-                    if update_ubs(old_name, new_name):
-                        st.success(f"UBS '{old_name}' atualizada para '{new_name}'.")
-                    else:
-                        st.error('Erro ao atualizar a UBS.')
+                st.error("Erro ao adicionar UBS.")
+    elif action == "Editar":
+        ubs = get_ubs_list()
+        if ubs:
+            old = st.selectbox("Selecione", ubs)
+            new = st.text_input("Novo nome", value=old)
+            if st.button("Atualizar") and new:
+                if update_ubs(old, new):
+                    st.success("UBS atualizada!")
                 else:
-                    st.error('Por favor, insira o novo nome da UBS.')
-        else:
-            st.write('Nenhuma UBS cadastrada para editar.')
-
-    elif action == 'Remover UBS':
-        ubs_list = get_ubs_list()
-        if ubs_list:
-            nome_ubs = st.selectbox('Selecione a UBS para remover:', ubs_list)
-            if st.button('Remover'):
-                if remove_ubs(nome_ubs):
-                    st.success(f"UBS '{nome_ubs}' removida com sucesso.")
+                    st.error("Erro na atualização.")
+    elif action == "Remover":
+        ubs = get_ubs_list()
+        if ubs:
+            nome = st.selectbox("Selecione para remover", ubs)
+            if st.button("Remover"):
+                if remove_ubs(nome):
+                    st.success("UBS removida!")
                 else:
-                    st.error('Erro ao remover a UBS.')
-        else:
-            st.write('Nenhuma UBS cadastrada para remover.')
-
-# Inicializar o sistema de UBS ao rodar o script
-if __name__ == "__main__":
-    initialize_ubs()
-    # Exibir UBSs cadastradas para verificação
-    ubs_list = get_ubs_list()
-    print("UBSs cadastradas:")
-    for ubs in ubs_list:
-        print(ubs)
+                    st.error("Erro ao remover UBS.")
