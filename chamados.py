@@ -61,7 +61,7 @@ def add_chamado(username, ubs, setor, tipo_defeito, problema, machine=None, patr
         st.error(f"Erro ao adicionar chamado: {e}")
         return None
 
-def finalizar_chamado(id_chamado, solucao):
+def finalizar_chamado(id_chamado, solucao, pecas_usadas=None):
     try:
         hora_fechamento = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         # Atualiza o chamado com a solução e a hora de fechamento
@@ -70,10 +70,12 @@ def finalizar_chamado(id_chamado, solucao):
             "hora_fechamento": hora_fechamento
         }).eq("id", id_chamado).execute()
         
-        # Recebe as peças utilizadas (entrada de texto, separadas por vírgula)
-        pecas_input = st.text_area("Informe as peças utilizadas (separadas por vírgula)")
-        pecas_usadas = [p.strip() for p in pecas_input.split(",") if p.strip()] if pecas_input else []
+        # Se pecas_usadas não foi passada, pode ser solicitada via text_area (fallback)
+        if pecas_usadas is None:
+            pecas_input = st.text_area("Informe as peças utilizadas (separadas por vírgula)")
+            pecas_usadas = [p.strip() for p in pecas_input.split(",") if p.strip()] if pecas_input else []
         
+        # Insere cada peça utilizada
         if pecas_usadas:
             for peca in pecas_usadas:
                 supabase.table("pecas_usadas").insert({
@@ -82,7 +84,7 @@ def finalizar_chamado(id_chamado, solucao):
                     "data_uso": hora_fechamento
                 }).execute()
         
-        # Atualiza o histórico de manutenção, se houver patrimônio associado
+        # Atualiza o histórico de manutenção se houver patrimônio associado
         resp = supabase.table("chamados").select("patrimonio").eq("id", id_chamado).execute()
         if resp.data and len(resp.data) > 0:
             patrimonio = resp.data[0].get("patrimonio")
@@ -131,7 +133,6 @@ def calculate_working_hours(start, end):
       - Manha: 08:00 a 12:00
       - Tarde: 13:00 a 17:00
     Ignora finais de semana.
-    
     Retorna um objeto timedelta com o tempo util.
     """
     if start >= end:
@@ -141,35 +142,30 @@ def calculate_working_hours(start, end):
     current = start
 
     while current < end:
-        # Se for sabado ou domingo, pula para o proximo dia
         if current.weekday() >= 5:
             current = datetime.combine(current.date() + timedelta(days=1), datetime.min.time())
             continue
 
-        # Define os intervalos de trabalho para o dia atual
         morning_start = current.replace(hour=8, minute=0, second=0, microsecond=0)
         morning_end = current.replace(hour=12, minute=0, second=0, microsecond=0)
         afternoon_start = current.replace(hour=13, minute=0, second=0, microsecond=0)
         afternoon_end = current.replace(hour=17, minute=0, second=0, microsecond=0)
 
-        # Calcula tempo util na manha, se houver sobreposicao
         if end > morning_start:
             interval_start = max(current, morning_start)
             interval_end = min(end, morning_end)
             if interval_end > interval_start:
                 total_seconds += (interval_end - interval_start).total_seconds()
         
-        # Calcula tempo util na tarde, se houver sobreposicao
         if end > afternoon_start:
             interval_start = max(current, afternoon_start)
             interval_end = min(end, afternoon_end)
             if interval_end > interval_start:
                 total_seconds += (interval_end - interval_start).total_seconds()
         
-        # Avanca para o proximo dia
         current = datetime.combine(current.date() + timedelta(days=1), datetime.min.time())
     
     return timedelta(seconds=total_seconds)
 
 if __name__ == "__main__":
-    st.write("Modulo de Chamados Técnicos")
+    st.write("Modulo de Chamados Tecnicos")
