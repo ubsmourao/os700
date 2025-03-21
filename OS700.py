@@ -7,10 +7,9 @@ from streamlit_option_menu import option_menu
 # Importação dos módulos e funções
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import add_chamado, list_chamados, list_chamados_em_aberto, finalizar_chamado, buscar_no_inventario_por_patrimonio
-from inventario import show_inventory_list, add_machine_to_inventory, get_machines_from_inventory
-from ubs import get_ubs_list  # para seleção de UBS na abertura de chamados e cadastro
+from inventario import show_inventory_list, cadastro_maquina  # A função cadastro_maquina será definida em inventario.py
+from ubs import get_ubs_list  # Para seleção de UBS
 from setores import get_setores_list
-# Note: As funções de gerenciamento de UBS, Setores e Estoque serão chamadas de seus respectivos módulos quando necessário
 
 # Configuração do logging
 logging.basicConfig(level=logging.INFO)
@@ -71,7 +70,6 @@ def home():
 # Função para abrir chamado
 def abrir_chamado():
     st.subheader("Abrir Chamado Técnico")
-    # Número de patrimônio (opcional)
     patrimonio = st.text_input("Número de Patrimônio (opcional)")
     machine_info = None
     machine_type = None
@@ -93,6 +91,7 @@ def abrir_chamado():
             default_tipo = "Não informado"
             default_marca = "Não informado"
             default_modelo = "Não informado"
+            from inventario import add_machine_to_inventory
             add_machine_to_inventory(default_tipo, default_marca, default_modelo, None, "Ativo", default_ubs, "Não informado", patrimonio, default_setor)
             st.success("Máquina cadastrada automaticamente no inventário.")
             machine_info = buscar_no_inventario_por_patrimonio(patrimonio)
@@ -108,7 +107,6 @@ def abrir_chamado():
         setor = st.selectbox("Setor", get_setores_list())
         machine_type = st.selectbox("Tipo de Máquina", ["Computador", "Impressora", "Outro"])
 
-    # Define os tipos de defeito com os nomes originais
     if machine_type == "Computador":
         defect_options = [
             "Computador não liga",
@@ -158,22 +156,27 @@ def chamados_tecnicos():
     else:
         st.write("Nenhum chamado técnico encontrado.")
 
-# Função para exibir inventário (chama a função do módulo inventario)
+# Função para inventário (lista e cadastro)
 def inventario():
-    from inventario import show_inventory_list
-    show_inventory_list()
+    st.subheader("Inventário")
+    opcao = st.radio("Selecione uma opção:", ["Listar Inventário", "Cadastrar Máquina"])
+    if opcao == "Listar Inventário":
+        from inventario import show_inventory_list
+        show_inventory_list()
+    else:
+        from inventario import cadastro_maquina
+        cadastro_maquina()
 
-# Função para gerenciamento do estoque de peças (chama o módulo estoque)
+# Função para gerenciamento do estoque
 def estoque():
     from estoque import manage_estoque
     manage_estoque()
 
-# Função de administração
+# Função de administração (excluindo o cadastro de máquina)
 def administracao():
     st.subheader("Administração")
     admin_option = st.selectbox("Opções de Administração", [
         "Cadastro de Usuário",
-        "Cadastro de Máquina",
         "Gerenciar UBSs",
         "Gerenciar Setores",
         "Lista de Usuários"
@@ -188,19 +191,6 @@ def administracao():
                 st.success("Usuário cadastrado com sucesso!")
             else:
                 st.error("Erro ao cadastrar usuário ou usuário já existe.")
-    elif admin_option == "Cadastro de Máquina":
-        st.markdown("### Cadastro de Máquina no Inventário")
-        tipo = st.selectbox("Tipo de Equipamento", ["Computador", "Impressora", "Monitor", "Outro"])
-        marca = st.text_input("Marca")
-        modelo = st.text_input("Modelo")
-        numero_serie = st.text_input("Número de Série (Opcional)")
-        patrimonio = st.text_input("Número de Patrimônio")
-        status = st.selectbox("Status", ["Ativo", "Em Manutenção", "Inativo"])
-        ubs = st.selectbox("UBS", sorted(get_ubs_list()))
-        setor = st.selectbox("Setor", sorted(get_setores_list()))
-        propria_locada = st.selectbox("Própria ou Locada", ["Própria", "Locada"])
-        if st.button("Cadastrar Máquina"):
-            add_machine_to_inventory(tipo, marca, modelo, numero_serie, status, ubs, propria_locada, patrimonio, setor)
     elif admin_option == "Gerenciar UBSs":
         from ubs import manage_ubs
         manage_ubs()
@@ -230,7 +220,7 @@ def relatorios():
         st.dataframe(pd.DataFrame(inventario_data))
     else:
         st.write("Nenhum item de inventário encontrado.")
-    # Aqui você pode expandir com gráficos e estatísticas.
+    # Expanda com gráficos e estatísticas conforme necessário
 
 # Roteamento do menu
 if selected == "Login":
