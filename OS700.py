@@ -5,20 +5,26 @@ import logging
 import pandas as pd
 from streamlit_option_menu import option_menu
 
-# Importando funções dos módulos refatorados
+# Importação dos módulos (certifique-se de que estes arquivos estão devidamente implementados)
 from autenticacao import authenticate, add_user, is_admin, list_users
-from chamados import add_chamado, list_chamados, list_chamados_em_aberto, finalizar_chamado, get_chamado_by_protocolo, buscar_no_inventario_por_patrimonio
-from inventario import add_machine_to_inventory, show_inventory_list, show_maintenance_history, add_maintenance_history
+from chamados import (
+    add_chamado,
+    list_chamados,
+    list_chamados_em_aberto,
+    finalizar_chamado,
+    buscar_no_inventario_por_patrimonio,
+)
+from inventario import show_inventory_list, add_machine_to_inventory, get_machines_from_inventory
 from ubs import get_ubs_list, manage_ubs
 from setores import get_setores_list, manage_setores
 
-# Configuração básica de logging
+# Configuração do logging
 logging.basicConfig(level=logging.INFO)
 
-# Inicializando variáveis de sessão
-if 'logged_in' not in st.session_state:
+# Inicialização das variáveis de sessão
+if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
-if 'username' not in st.session_state:
+if "username" not in st.session_state:
     st.session_state.username = ""
 
 # Configuração da página
@@ -31,18 +37,19 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# Define as opções do menu conforme o status do login e privilégios
+# Menu: as opções variam conforme o status de login e privilégios
 if st.session_state.logged_in:
     if is_admin(st.session_state.username):
-        menu_options = ['Home', 'Abrir Chamado', 'Administração', 'Relatórios', 'Sair']
+        menu_options = ["Home", "Abrir Chamado", "Chamados Técnicos", "Inventário", "Administração", "Relatórios", "Sair"]
     else:
-        menu_options = ['Home', 'Abrir Chamado', 'Sair']
+        menu_options = ["Home", "Abrir Chamado", "Chamados Técnicos", "Inventário", "Relatórios", "Sair"]
 else:
-    menu_options = ['Login']
+    menu_options = ["Login"]
 
 selected = option_menu("Menu", menu_options, orientation="horizontal")
 
-# Função de login
+# --- Funções de cada seção ---
+
 def login():
     st.subheader("Login")
     username = st.text_input("Usuário")
@@ -57,24 +64,26 @@ def login():
         else:
             st.error("Usuário ou senha incorretos.")
 
-# Função de logout
 def logout():
     st.session_state.logged_in = False
     st.session_state.username = ""
     st.success("Você saiu.")
 
-# Função para abrir chamado com os tipos de defeito originais
+def home():
+    st.subheader("Bem-vindo!")
+    st.write("Selecione uma opção no menu para começar.")
+
 def abrir_chamado():
-    if not st.session_state.logged_in:
-        st.warning("Você precisa estar logado para abrir um chamado.")
-        return
-    st.subheader("Abrir Chamado")
-    
-    patrimonio = st.text_input("Número de Patrimônio")
+    st.subheader("Abrir Chamado Técnico")
+    # Campo para número de patrimônio (opcional)
+    patrimonio = st.text_input("Número de Patrimônio (opcional)")
     machine_info = None
     machine_type = None
-    
+    ubs_selecionada = None
+    setor = None
+
     if patrimonio:
+        # Tenta buscar a máquina no inventário pelo número de patrimônio
         machine_info = buscar_no_inventario_por_patrimonio(patrimonio)
         if machine_info:
             st.write(f"Máquina encontrada: {machine_info['tipo']} - {machine_info['marca']} {machine_info['modelo']}")
@@ -83,16 +92,40 @@ def abrir_chamado():
             setor = machine_info["setor"]
             machine_type = machine_info["tipo"]
         else:
-            st.error("Patrimônio não encontrado no inventário. Preencha os dados manualmente.")
-            ubs_selecionada = st.selectbox("UBS", get_ubs_list())
-            setor = st.selectbox("Setor", get_setores_list())
-            machine_type = st.selectbox("Tipo de Máquina", ["Computador", "Impressora", "Outro"])
+            st.info("Patrimônio não encontrado no inventário. A máquina será cadastrada automaticamente.")
+            default_ubs = st.selectbox("Selecione a UBS para cadastro automático", get_ubs_list())
+            default_setor = st.selectbox("Selecione o Setor para cadastro automático", get_setores_list())
+            # Valores padrão para os demais campos
+            default_tipo = "Não informado"
+            default_marca = "Não informado"
+            default_modelo = "Não informado"
+            add_machine_to_inventory(
+                tipo=default_tipo,
+                marca=default_marca,
+                modelo=default_modelo,
+                numero_serie=None,
+                status="Ativo",
+                localizacao=default_ubs,
+                propria_locada="Não informado",
+                patrimonio=patrimonio,
+                setor=default_setor
+            )
+            st.success("Máquina cadastrada automaticamente no inventário.")
+            machine_info = buscar_no_inventario_por_patrimonio(patrimonio)
+            if machine_info:
+                machine_type = machine_info["tipo"]
+                ubs_selecionada = machine_info["localizacao"]
+                setor = machine_info["setor"]
+            else:
+                st.error("Erro ao recuperar os dados da máquina cadastrada.")
+                st.stop()
     else:
+        # Se patrimônio não informado, o usuário escolhe manualmente
         ubs_selecionada = st.selectbox("UBS", get_ubs_list())
         setor = st.selectbox("Setor", get_setores_list())
         machine_type = st.selectbox("Tipo de Máquina", ["Computador", "Impressora", "Outro"])
-    
-    # Definir os tipos de defeito com os nomes originais
+
+    # Define os tipos de defeito conforme o tipo de máquina, com os nomes originais
     if machine_type == "Computador":
         defect_options = [
             "Computador não liga",
@@ -125,7 +158,7 @@ def abrir_chamado():
     
     tipo_defeito = st.selectbox("Tipo de Defeito/Solicitação", defect_options)
     problema = st.text_area("Descreva o problema ou solicitação")
-    
+
     if st.button("Abrir Chamado"):
         protocolo = add_chamado(
             st.session_state.username,
@@ -140,65 +173,101 @@ def abrir_chamado():
         else:
             st.error("Erro ao abrir chamado.")
 
-# Função de administração para usuários administradores
-def administracao():
-    if not st.session_state.logged_in or not is_admin(st.session_state.username):
-        st.warning("Você precisa estar logado como admin para acessar esta área.")
-        return
-    st.subheader("Administração")
-    opcao = st.selectbox("Opções de Administração", ["Cadastro de Usuário", "Cadastro de Máquina", "Lista de Usuários", "Gerenciar UBSs", "Gerenciar Setores"])
-    
-    if opcao == "Cadastro de Usuário":
-        novo_user = st.text_input("Novo Usuário")
-        nova_senha = st.text_input("Senha", type="password")
-        admin_check = st.checkbox("Administrador")
-        if st.button("Cadastrar Usuário"):
-            if add_user(novo_user, nova_senha, admin_check):
-                st.success("Usuário cadastrado com sucesso!")
-            else:
-                st.error("Erro ao cadastrar usuário ou usuário já existe.")
-    elif opcao == "Cadastro de Máquina":
-        tipo = st.selectbox("Tipo de Equipamento", ["Computador", "Impressora", "Monitor", "Outro"])
-        marca = st.text_input("Marca")
-        modelo = st.text_input("Modelo")
-        num_serie = st.text_input("Número de Série (Opcional)")
-        patrimonio = st.text_input("Número de Patrimônio")
-        status = st.selectbox("Status", ["Ativo", "Em Manutenção", "Inativo"])
-        ubs = st.selectbox("UBS", get_ubs_list())
-        setor = st.selectbox("Setor", get_setores_list())
-        propria_locada = st.selectbox("Própria ou Locada", ["Própria", "Locada"])
-        if st.button("Cadastrar Máquina"):
-            add_machine_to_inventory(tipo, marca, modelo, num_serie, status, ubs, propria_locada, patrimonio, setor)
-    elif opcao == "Lista de Usuários":
-        users = list_users()
-        st.write("Lista de Usuários:")
-        st.table(users)
-    elif opcao == "Gerenciar UBSs":
-        manage_ubs()
-    elif opcao == "Gerenciar Setores":
-        manage_setores()
-
-# Função de relatórios (exemplo simples listando os chamados)
-def relatorios():
-    st.subheader("Relatórios")
+def chamados_tecnicos():
+    st.subheader("Chamados Técnicos")
     chamados = list_chamados()
     if chamados:
         df = pd.DataFrame(chamados)
         st.dataframe(df)
+        st.info("Selecione um chamado para finalizar ou ver detalhes (essa funcionalidade pode ser aprimorada).")
     else:
         st.write("Nenhum chamado encontrado.")
 
-# Exibição da página conforme a opção selecionada no menu
+def inventario():
+    st.subheader("Inventário")
+    show_inventory_list()
+
+def administracao():
+    st.subheader("Administração")
+    admin_option = st.selectbox("Opções de Administração", [
+        "Cadastro de Usuário",
+        "Cadastro de Máquina",
+        "Gerenciar UBSs",
+        "Gerenciar Setores",
+        "Lista de Usuários"
+    ])
+    
+    if admin_option == "Cadastro de Usuário":
+        novo_user = st.text_input("Novo Usuário")
+        nova_senha = st.text_input("Senha", type="password")
+        admin_flag = st.checkbox("Administrador")
+        if st.button("Cadastrar Usuário"):
+            if add_user(novo_user, nova_senha, admin_flag):
+                st.success("Usuário cadastrado com sucesso!")
+            else:
+                st.error("Erro ao cadastrar usuário ou usuário já existe.")
+    
+    elif admin_option == "Cadastro de Máquina":
+        st.markdown("### Cadastro de Máquina no Inventário")
+        tipo = st.selectbox("Tipo de Equipamento", ["Computador", "Impressora", "Monitor", "Outro"])
+        marca = st.text_input("Marca")
+        modelo = st.text_input("Modelo")
+        numero_serie = st.text_input("Número de Série (Opcional)")
+        patrimonio = st.text_input("Número de Patrimônio")
+        status = st.selectbox("Status", ["Ativo", "Em Manutenção", "Inativo"])
+        ubs = st.selectbox("UBS", sorted(get_ubs_list()))
+        setor = st.selectbox("Setor", sorted(get_setores_list()))
+        propria_locada = st.selectbox("Própria ou Locada", ["Própria", "Locada"])
+        if st.button("Cadastrar Máquina"):
+            add_machine_to_inventory(tipo, marca, modelo, numero_serie, status, ubs, propria_locada, patrimonio, setor)
+    
+    elif admin_option == "Gerenciar UBSs":
+        manage_ubs()
+    
+    elif admin_option == "Gerenciar Setores":
+        manage_setores()
+    
+    elif admin_option == "Lista de Usuários":
+        usuarios = list_users()
+        if usuarios:
+            st.table(usuarios)
+        else:
+            st.write("Nenhum usuário cadastrado.")
+
+def relatorios():
+    st.subheader("Relatórios")
+    # Exemplo de relatório simples: listagem de chamados e inventário
+    chamados = list_chamados()
+    inventario_data = get_machines_from_inventory()
+    
+    if chamados:
+        st.markdown("### Chamados Técnicos")
+        st.dataframe(pd.DataFrame(chamados))
+    else:
+        st.write("Nenhum chamado encontrado.")
+    
+    if inventario_data:
+        st.markdown("### Inventário")
+        st.dataframe(pd.DataFrame(inventario_data))
+    else:
+        st.write("Nenhum item de inventário encontrado.")
+    
+    # Aqui você pode expandir com gráficos, estatísticas, médias de atendimento, etc.
+
+# --- Roteamento do menu ---
 if selected == "Login":
     login()
+elif selected == "Home":
+    home()
 elif selected == "Abrir Chamado":
     abrir_chamado()
+elif selected == "Chamados Técnicos":
+    chamados_tecnicos()
+elif selected == "Inventário":
+    inventario()
 elif selected == "Administração":
     administracao()
 elif selected == "Relatórios":
     relatorios()
 elif selected == "Sair":
     logout()
-elif selected == "Home":
-    st.subheader("Bem-vindo!")
-    st.write("Selecione uma opção no menu para começar.")
