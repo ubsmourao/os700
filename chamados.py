@@ -1,4 +1,4 @@
-# chamados.py
+import streamlit as st
 from supabase_client import supabase
 from datetime import datetime
 
@@ -8,7 +8,7 @@ def gerar_protocolo_sequencial():
         protocolos = [item["protocolo"] for item in resp.data if item.get("protocolo") is not None]
         return max(protocolos, default=0) + 1
     except Exception as e:
-        print(f"Erro ao gerar protocolo: {e}")
+        st.error(f"Erro ao gerar protocolo: {e}")
         return None
 
 def get_chamado_by_protocolo(protocolo):
@@ -16,7 +16,7 @@ def get_chamado_by_protocolo(protocolo):
         resp = supabase.table("chamados").select("*").eq("protocolo", protocolo).execute()
         return resp.data[0] if resp.data else None
     except Exception as e:
-        print(f"Erro ao buscar chamado: {e}")
+        st.error(f"Erro ao buscar chamado: {e}")
         return None
 
 def buscar_no_inventario_por_patrimonio(patrimonio):
@@ -34,7 +34,7 @@ def buscar_no_inventario_por_patrimonio(patrimonio):
             }
         return None
     except Exception as e:
-        print(f"Erro ao buscar patrimônio: {e}")
+        st.error(f"Erro ao buscar patrimônio: {e}")
         return None
 
 def add_chamado(username, ubs, setor, tipo_defeito, problema, machine=None, patrimonio=None):
@@ -55,21 +55,26 @@ def add_chamado(username, ubs, setor, tipo_defeito, problema, machine=None, patr
             "patrimonio": patrimonio
         }
         supabase.table("chamados").insert(data).execute()
+        st.success("Chamado aberto com sucesso!")
         return protocolo
     except Exception as e:
-        print(f"Erro ao adicionar chamado: {e}")
+        st.error(f"Erro ao adicionar chamado: {e}")
         return None
 
-def finalizar_chamado(id_chamado, solucao, pecas_usadas=None):
+def finalizar_chamado(id_chamado, solucao):
     try:
         hora_fechamento = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        st.info("Informe as peças utilizadas no chamado (separadas por vírgula):")
+        pecas_input = st.text_area("Peças utilizadas")
+        pecas_usadas = [p.strip() for p in pecas_input.split(",") if p.strip()] if pecas_input else []
+        
         # Atualiza o chamado com a solução e fechamento
         supabase.table("chamados").update({
             "solucao": solucao,
             "hora_fechamento": hora_fechamento
         }).eq("id", id_chamado).execute()
 
-        # Insere peças usadas, se houver
+        # Insere as peças utilizadas
         if pecas_usadas:
             for peca in pecas_usadas:
                 supabase.table("pecas_usadas").insert({
@@ -77,12 +82,10 @@ def finalizar_chamado(id_chamado, solucao, pecas_usadas=None):
                     "peca_nome": peca,
                     "data_uso": hora_fechamento
                 }).execute()
-        
-        # Recupera o patrimônio associado ao chamado para criar o histórico
+        # Insere histórico de manutenção, se houver patrimônio associado
         resp = supabase.table("chamados").select("patrimonio").eq("id", id_chamado).execute()
         if resp.data and len(resp.data) > 0:
-            chamado = resp.data[0]
-            patrimonio = chamado.get("patrimonio")
+            patrimonio = resp.data[0].get("patrimonio")
         else:
             patrimonio = None
 
@@ -93,16 +96,16 @@ def finalizar_chamado(id_chamado, solucao, pecas_usadas=None):
                 "descricao": descricao,
                 "data_manutencao": hora_fechamento
             }).execute()
-        print(f"Chamado {id_chamado} finalizado.")
+        st.success(f"Chamado {id_chamado} finalizado.")
     except Exception as e:
-        print(f"Erro ao finalizar chamado: {e}")
+        st.error(f"Erro ao finalizar chamado: {e}")
 
 def list_chamados():
     try:
         resp = supabase.table("chamados").select("*").execute()
         return resp.data
     except Exception as e:
-        print(f"Erro ao listar chamados: {e}")
+        st.error(f"Erro ao listar chamados: {e}")
         return []
 
 def list_chamados_em_aberto():
@@ -110,5 +113,8 @@ def list_chamados_em_aberto():
         resp = supabase.table("chamados").select("*").is_("hora_fechamento", None).execute()
         return resp.data
     except Exception as e:
-        print(f"Erro ao listar chamados abertos: {e}")
+        st.error(f"Erro ao listar chamados abertos: {e}")
         return []
+
+if __name__ == "__main__":
+    st.write("Módulo de Chamados Técnicos")
