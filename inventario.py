@@ -55,7 +55,14 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
     """
     Recupera todas as pecas utilizadas associadas aos chamados tecnicos da maquina identificada pelo patrimonio.
     """
-    from chamados import get_chamados_por_patrimonio  # Import local para evitar circularidade
+    # Importacao local usando __import__ para evitar dependencia circular
+    try:
+        mod = __import__("chamados", fromlist=["get_chamados_por_patrimonio"])
+        get_chamados_por_patrimonio = mod.get_chamados_por_patrimonio
+    except Exception as e:
+        st.error("Erro ao importar funcao de chamados.")
+        print(f"Erro: {e}")
+        return []
     chamados = get_chamados_por_patrimonio(patrimonio)
     if not chamados:
         return []
@@ -128,7 +135,14 @@ def show_inventory_list():
             
             with st.expander("Historico Completo da Maquina"):
                 st.markdown("**Chamados Tecnicos:**")
-                from chamados import get_chamados_por_patrimonio
+                # Importacao local para evitar circularidade
+                try:
+                    mod = __import__("chamados", fromlist=["get_chamados_por_patrimonio"])
+                    get_chamados_por_patrimonio = mod.get_chamados_por_patrimonio
+                except Exception as e:
+                    st.error("Erro ao importar funcao de chamados.")
+                    print(f"Erro: {e}")
+                    get_chamados_por_patrimonio = lambda x: []
                 chamados = get_chamados_por_patrimonio(selected_patrimonio)
                 if chamados:
                     st.dataframe(pd.DataFrame(chamados))
@@ -144,47 +158,5 @@ def show_inventory_list():
     else:
         st.write("Nenhum item encontrado no inventario.")
 
-def cadastro_maquina():
-    st.subheader("Cadastrar Maquina no Inventario")
-    tipo = st.selectbox("Tipo de Equipamento", ["Computador", "Impressora", "Monitor", "Outro"])
-    marca = st.text_input("Marca")
-    modelo = st.text_input("Modelo")
-    numero_serie = st.text_input("Numero de Serie (Opcional)")
-    patrimonio = st.text_input("Numero de Patrimonio")
-    status = st.selectbox("Status", ["Ativo", "Em Manutencao", "Inativo"])
-    # Para UBS e Setor, usamos funcoes importadas
-    from ubs import get_ubs_list
-    ubs = st.selectbox("UBS", sorted(get_ubs_list()))
-    setores_list = get_setores_list()
-    setor = st.selectbox("Setor", sorted(setores_list))
-    propria_locada = st.selectbox("Propria ou Locada", ["Propria", "Locada"])
-    
-    if st.button("Cadastrar Maquina"):
-        # Opcional: verificar se ja existe uma maquina com mesmo patrimonio
-        try:
-            resp = supabase.table("inventario").select("numero_patrimonio").eq("numero_patrimonio", patrimonio).execute()
-            if resp.data:
-                st.error("Maquina com este patrimonio ja existe.")
-            else:
-                data = {
-                    "numero_patrimonio": patrimonio,
-                    "tipo": tipo,
-                    "marca": marca,
-                    "modelo": modelo,
-                    "numero_serie": numero_serie or None,
-                    "status": status,
-                    "localizacao": ubs,
-                    "propria_locada": propria_locada,
-                    "setor": setor
-                }
-                supabase.table("inventario").insert(data).execute()
-                st.success("Maquina cadastrada com sucesso!")
-        except Exception as e:
-            st.error("Erro ao cadastrar maquina.")
-            st.write(e)
-
 if __name__ == "__main__":
-    st.write("Modulo Inventario")
-    # Pode-se escolher qual função testar: cadastro ou listagem
-    # cadastro_maquina()
     show_inventory_list()
