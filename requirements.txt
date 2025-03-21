@@ -1,0 +1,11 @@
+fpdf==1.7.2
+matplotlib==3.7.2
+matplotlib==3.8.0
+pandas==2.0.3
+plotly==5.9.0
+python_bcrypt==0.3.2
+seaborn==0.13.2
+streamlit==1.39.0
+streamlit_option_menu==0.3.13
+twilio==8.10.3
+~treamlit==1.28.2
