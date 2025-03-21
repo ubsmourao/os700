@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from supabase_client import supabase
 from setores import get_setores_list
-from chamados import get_chamados_por_patrimonio  # Função que busca chamados pelo patrimônio
 
 def get_machines_from_inventory():
     try:
@@ -60,13 +59,14 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
     """
     Recupera todas as peças utilizadas associadas aos chamados técnicos da máquina identificada pelo patrimônio.
     """
+    # Importação local para evitar dependência circular
+    from chamados import get_chamados_por_patrimonio
     chamados = get_chamados_por_patrimonio(patrimonio)
     if not chamados:
         return []
     # Coleta os IDs dos chamados
     chamado_ids = [chamado["id"] for chamado in chamados if "id" in chamado]
     try:
-        # Consulta peças utilizadas para os chamados com os IDs coletados
         resp = supabase.table("pecas_usadas").select("*").in_("chamado_id", chamado_ids).execute()
         return resp.data if resp.data else []
     except Exception as e:
@@ -81,24 +81,25 @@ def show_inventory_list():
         df = pd.DataFrame(machines)
         st.dataframe(df)
         
-        # Permite selecionar um item para edição/exclusão e para ver o histórico completo
+        # Permite selecionar um item para edição/exclusão e visualizar o histórico completo
         patrimonio_options = df["numero_patrimonio"].unique().tolist()
         selected_patrimonio = st.selectbox("Selecione o patrimônio para visualizar detalhes", patrimonio_options)
         if selected_patrimonio:
             item = df[df["numero_patrimonio"] == selected_patrimonio].iloc[0]
             
-            # Expander para edição
             with st.expander("Editar Item de Inventário"):
                 with st.form("editar_item"):
                     tipo = st.text_input("Tipo", value=item.get("tipo", ""))
                     marca = st.text_input("Marca", value=item.get("marca", ""))
                     modelo = st.text_input("Modelo", value=item.get("modelo", ""))
+                    
                     status_options = ["Ativo", "Em Manutenção", "Inativo"]
                     if item.get("status") in status_options:
                         status_index = status_options.index(item.get("status"))
                     else:
                         status_index = 0
                     status = st.selectbox("Status", status_options, index=status_index)
+                    
                     localizacao = st.text_input("Localização", value=item.get("localizacao", ""))
                     
                     # Para Setor, utiliza selectbox com a lista de setores
@@ -110,7 +111,7 @@ def show_inventory_list():
                     setor = st.selectbox("Setor", setores_list, index=setor_index)
                     
                     propria_opcoes = ["Própria", "Locada"]
-                    if item.get("propria_locada") in propria_opcoes:
+                    if item.get("propria_locada") in própria_opcoes:
                         propria_index = própria_opcoes.index(item.get("propria_locada"))
                     else:
                         própria_index = 0
@@ -129,19 +130,17 @@ def show_inventory_list():
                         }
                         edit_inventory_item(selected_patrimonio, new_values)
             
-            # Expander para exclusão
             with st.expander("Excluir Item do Inventário"):
                 if st.button("Excluir este item"):
                     delete_inventory_item(selected_patrimonio)
             
-            # Expander para histórico completo
             with st.expander("Histórico Completo da Máquina"):
                 # Histórico de Chamados Técnicos
                 st.markdown("**Chamados Técnicos:**")
+                from chamados import get_chamados_por_patrimonio  # Import local para evitar circularidade
                 chamados = get_chamados_por_patrimonio(selected_patrimonio)
                 if chamados:
-                    df_chamados = pd.DataFrame(chamados)
-                    st.dataframe(df_chamados)
+                    st.dataframe(pd.DataFrame(chamados))
                 else:
                     st.write("Nenhum chamado técnico encontrado para este item.")
                 
@@ -149,8 +148,7 @@ def show_inventory_list():
                 st.markdown("**Peças Utilizadas:**")
                 pecas = get_pecas_usadas_por_patrimonio(selected_patrimonio)
                 if pecas:
-                    df_pecas = pd.DataFrame(pecas)
-                    st.dataframe(df_pecas)
+                    st.dataframe(pd.DataFrame(pecas))
                 else:
                     st.write("Nenhuma peça utilizada encontrada para este item.")
     else:
