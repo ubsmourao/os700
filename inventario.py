@@ -55,8 +55,8 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
     """
     Recupera todas as pecas utilizadas associadas aos chamados tecnicos da maquina identificada pelo patrimonio.
     """
-    # Importacao local usando __import__ para evitar dependencia circular
     try:
+        # Importacao local para evitar dependencias circulares
         mod = __import__("chamados", fromlist=["get_chamados_por_patrimonio"])
         get_chamados_por_patrimonio = mod.get_chamados_por_patrimonio
     except Exception as e:
@@ -135,7 +135,6 @@ def show_inventory_list():
             
             with st.expander("Historico Completo da Maquina"):
                 st.markdown("**Chamados Tecnicos:**")
-                # Importacao local para evitar circularidade
                 try:
                     mod = __import__("chamados", fromlist=["get_chamados_por_patrimonio"])
                     get_chamados_por_patrimonio = mod.get_chamados_por_patrimonio
