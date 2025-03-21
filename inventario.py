@@ -55,8 +55,7 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
     """
     Recupera todas as pecas utilizadas associadas aos chamados tecnicos da maquina identificada pelo patrimonio.
     """
-    # Importacao local para evitar dependencia circular
-    from chamados import get_chamados_por_patrimonio
+    from chamados import get_chamados_por_patrimonio  # Import local para evitar circularidade
     chamados = get_chamados_por_patrimonio(patrimonio)
     if not chamados:
         return []
@@ -96,7 +95,6 @@ def show_inventory_list():
                     
                     localizacao = st.text_input("Localizacao", value=item.get("localizacao", ""))
                     
-                    # Utiliza selectbox para setor com lista de setores
                     setores_list = get_setores_list()
                     if item.get("setor") in setores_list:
                         setor_index = setores_list.index(item.get("setor"))
@@ -146,5 +144,47 @@ def show_inventory_list():
     else:
         st.write("Nenhum item encontrado no inventario.")
 
+def cadastro_maquina():
+    st.subheader("Cadastrar Maquina no Inventario")
+    tipo = st.selectbox("Tipo de Equipamento", ["Computador", "Impressora", "Monitor", "Outro"])
+    marca = st.text_input("Marca")
+    modelo = st.text_input("Modelo")
+    numero_serie = st.text_input("Numero de Serie (Opcional)")
+    patrimonio = st.text_input("Numero de Patrimonio")
+    status = st.selectbox("Status", ["Ativo", "Em Manutencao", "Inativo"])
+    # Para UBS e Setor, usamos funcoes importadas
+    from ubs import get_ubs_list
+    ubs = st.selectbox("UBS", sorted(get_ubs_list()))
+    setores_list = get_setores_list()
+    setor = st.selectbox("Setor", sorted(setores_list))
+    propria_locada = st.selectbox("Propria ou Locada", ["Propria", "Locada"])
+    
+    if st.button("Cadastrar Maquina"):
+        # Opcional: verificar se ja existe uma maquina com mesmo patrimonio
+        try:
+            resp = supabase.table("inventario").select("numero_patrimonio").eq("numero_patrimonio", patrimonio).execute()
+            if resp.data:
+                st.error("Maquina com este patrimonio ja existe.")
+            else:
+                data = {
+                    "numero_patrimonio": patrimonio,
+                    "tipo": tipo,
+                    "marca": marca,
+                    "modelo": modelo,
+                    "numero_serie": numero_serie or None,
+                    "status": status,
+                    "localizacao": ubs,
+                    "propria_locada": propria_locada,
+                    "setor": setor
+                }
+                supabase.table("inventario").insert(data).execute()
+                st.success("Maquina cadastrada com sucesso!")
+        except Exception as e:
+            st.error("Erro ao cadastrar maquina.")
+            st.write(e)
+
 if __name__ == "__main__":
+    st.write("Modulo Inventario")
+    # Pode-se escolher qual função testar: cadastro ou listagem
+    # cadastro_maquina()
     show_inventory_list()
