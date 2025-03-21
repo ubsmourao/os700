@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from supabase_client import supabase
 from setores import get_setores_list
+from ubs import get_ubs_list  # Para uso no cadastro de máquina
 
 def get_machines_from_inventory():
     try:
@@ -56,7 +57,7 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
     Recupera todas as pecas utilizadas associadas aos chamados tecnicos da maquina identificada pelo patrimonio.
     """
     try:
-        # Importacao local para evitar dependencias circulares
+        # Importacao local para evitar dependencia circular
         mod = __import__("chamados", fromlist=["get_chamados_por_patrimonio"])
         get_chamados_por_patrimonio = mod.get_chamados_por_patrimonio
     except Exception as e:
@@ -94,26 +95,17 @@ def show_inventory_list():
                     modelo = st.text_input("Modelo", value=item.get("modelo", ""))
                     
                     status_options = ["Ativo", "Em Manutencao", "Inativo"]
-                    if item.get("status") in status_options:
-                        status_index = status_options.index(item.get("status"))
-                    else:
-                        status_index = 0
+                    status_index = status_options.index(item.get("status")) if item.get("status") in status_options else 0
                     status = st.selectbox("Status", status_options, index=status_index)
                     
                     localizacao = st.text_input("Localizacao", value=item.get("localizacao", ""))
                     
                     setores_list = get_setores_list()
-                    if item.get("setor") in setores_list:
-                        setor_index = setores_list.index(item.get("setor"))
-                    else:
-                        setor_index = 0
+                    setor_index = setores_list.index(item.get("setor")) if item.get("setor") in setores_list else 0
                     setor = st.selectbox("Setor", setores_list, index=setor_index)
                     
                     propria_options = ["Propria", "Locada"]
-                    if item.get("propria_locada") in propria_options:
-                        propria_index = propria_options.index(item.get("propria_locada"))
-                    else:
-                        propria_index = 0
+                    propria_index = propria_options.index(item.get("propria_locada")) if item.get("propria_locada") in propria_options else 0
                     propria_locada = st.selectbox("Propria/Locada", propria_options, index=propria_index)
                     
                     submit = st.form_submit_button("Atualizar Item")
@@ -157,5 +149,45 @@ def show_inventory_list():
     else:
         st.write("Nenhum item encontrado no inventario.")
 
+def cadastro_maquina():
+    st.subheader("Cadastrar Maquina no Inventario")
+    tipo = st.selectbox("Tipo de Equipamento", ["Computador", "Impressora", "Monitor", "Outro"])
+    marca = st.text_input("Marca")
+    modelo = st.text_input("Modelo")
+    numero_serie = st.text_input("Numero de Serie (Opcional)")
+    patrimonio = st.text_input("Numero de Patrimonio")
+    status = st.selectbox("Status", ["Ativo", "Em Manutencao", "Inativo"])
+    ubs = st.selectbox("UBS", sorted(get_ubs_list()))
+    setores_list = get_setores_list()
+    setor = st.selectbox("Setor", sorted(setores_list))
+    propria_locada = st.selectbox("Propria ou Locada", ["Propria", "Locada"])
+    
+    if st.button("Cadastrar Maquina"):
+        try:
+            resp = supabase.table("inventario").select("numero_patrimonio").eq("numero_patrimonio", patrimonio).execute()
+            if resp.data:
+                st.error("Maquina com este patrimonio ja existe.")
+            else:
+                data = {
+                    "numero_patrimonio": patrimonio,
+                    "tipo": tipo,
+                    "marca": marca,
+                    "modelo": modelo,
+                    "numero_serie": numero_serie or None,
+                    "status": status,
+                    "localizacao": ubs,
+                    "propria_locada": propria_locada,
+                    "setor": setor
+                }
+                supabase.table("inventario").insert(data).execute()
+                st.success("Maquina cadastrada com sucesso!")
+        except Exception as e:
+            st.error("Erro ao cadastrar maquina.")
+            st.write(e)
+
 if __name__ == "__main__":
-    show_inventory_list()
+    opcao = st.radio("Selecione uma opcao:", ["Listar Inventario", "Cadastrar Maquina"])
+    if opcao == "Listar Inventario":
+        show_inventory_list()
+    else:
+        cadastro_maquina()
