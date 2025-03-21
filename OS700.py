@@ -3,6 +3,7 @@ import os
 import logging
 import pandas as pd
 import matplotlib.pyplot as plt
+from datetime import datetime, timedelta
 from streamlit_option_menu import option_menu
 
 # Importação dos módulos e funções
@@ -13,12 +14,12 @@ from chamados import (
     list_chamados_em_aberto,
     finalizar_chamado,
     buscar_no_inventario_por_patrimonio,
-    # Supondo que exista uma função para calcular o tempo decorrido:
-    calculate_working_hours  # Exemplo: deve retornar um objeto timedelta
+    calculate_working_hours
 )
 from inventario import show_inventory_list, cadastro_maquina, get_machines_from_inventory
 from ubs import get_ubs_list
 from setores import get_setores_list
+from estoque import manage_estoque
 
 # Configuração do logging
 logging.basicConfig(level=logging.INFO)
@@ -39,7 +40,7 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# Definição do menu conforme login e privilégios
+# Definição do menu com base no login e privilégios
 if st.session_state.logged_in:
     if is_admin(st.session_state.username):
         menu_options = [
@@ -69,7 +70,8 @@ else:
 
 selected = option_menu("Menu", menu_options, orientation="horizontal")
 
-# Função de login
+# --- Funções do Aplicativo ---
+
 def login():
     st.subheader("Login")
     username = st.text_input("Usuário")
@@ -84,7 +86,6 @@ def login():
         else:
             st.error("Usuário ou senha incorretos.")
 
-# Função de logout
 def logout():
     st.session_state.logged_in = False
     st.session_state.username = ""
@@ -118,7 +119,6 @@ def abrir_chamado():
         setor = st.selectbox("Setor", get_setores_list())
         machine_type = st.selectbox("Tipo de Máquina", ["Computador", "Impressora", "Outro"])
 
-    # Definir os tipos de defeito conforme o tipo de máquina
     if machine_type == "Computador":
         defect_options = [
             "Computador não liga",
@@ -187,7 +187,21 @@ def chamados_tecnicos():
     st.subheader("Chamados Técnicos")
     chamados = list_chamados()
     if chamados:
-        st.dataframe(pd.DataFrame(chamados))
+        # Calcula o tempo decorrido para cada chamado finalizado e adiciona como coluna
+        df = pd.DataFrame(chamados)
+        def calcula_tempo(row):
+            if pd.notnull(row.get("hora_fechamento")):
+                try:
+                    abertura = datetime.strptime(row["hora_abertura"], '%d/%m/%Y %H:%M:%S')
+                    fechamento = datetime.strptime(row["hora_fechamento"], '%d/%m/%Y %H:%M:%S')
+                    tempo_util = calculate_working_hours(abertura, fechamento)
+                    return str(tempo_util)
+                except Exception as e:
+                    return "Erro"
+            else:
+                return ""
+        df["Tempo Util (hh:mm:ss)"] = df.apply(calcula_tempo, axis=1)
+        st.dataframe(df)
     else:
         st.write("Nenhum chamado técnico encontrado.")
 
@@ -195,14 +209,11 @@ def inventario():
     st.subheader("Inventário")
     opcao = st.radio("Selecione uma opção:", ["Listar Inventário", "Cadastrar Máquina"])
     if opcao == "Listar Inventário":
-        from inventario import show_inventory_list
         show_inventory_list()
     else:
-        from inventario import cadastro_maquina
         cadastro_maquina()
 
 def estoque():
-    from estoque import manage_estoque
     manage_estoque()
 
 def administracao():
@@ -237,59 +248,66 @@ def administracao():
             st.write("Nenhum usuário cadastrado.")
 
 def relatorios():
-    st.subheader("Relatórios")
-    # Chamados
-    chamados = list_chamados()
-    # Inventário
-    inventario_data = get_machines_from_inventory()
+    st.subheader("Relatórios Completos")
+    st.markdown("### Seleção de Período")
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("Data Início")
+    with col2:
+        end_date = st.date_input("Data Fim")
     
+    if start_date > end_date:
+        st.error("Data Início não pode ser maior que Data Fim")
+        return
+
+    # Converte as datas para datetime
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
+    
+    # Filtra chamados com base na data de abertura
+    chamados = list_chamados()
     if chamados:
-        st.markdown("### Chamados Técnicos")
-        st.dataframe(pd.DataFrame(chamados))
+        df_chamados = pd.DataFrame(chamados)
+        # Converte a coluna de data
+        df_chamados["hora_abertura_dt"] = pd.to_datetime(df_chamados["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
+        chamados_period = df_chamados[(df_chamados["hora_abertura_dt"] >= start_datetime) & (df_chamados["hora_abertura_dt"] <= end_datetime)]
+        st.markdown("### Chamados Técnicos no Período")
+        st.dataframe(chamados_period)
+        
+        # Calcula o tempo médio de atendimento em horas úteis
+        from datetime import datetime
+        working_times = []
+        for idx, row in chamados_period.iterrows():
+            if pd.notnull(row.get("hora_fechamento")):
+                try:
+                    abertura = datetime.strptime(row["hora_abertura"], '%d/%m/%Y %H:%M:%S')
+                    fechamento = datetime.strptime(row["hora_fechamento"], '%d/%m/%Y %H:%M:%S')
+                    tempo_util = calculate_working_hours(abertura, fechamento)
+                    working_times.append(tempo_util.total_seconds())
+                except Exception as e:
+                    print(f"Erro ao calcular tempo para chamado {row.get('id')}: {e}")
+        if working_times:
+            media_segundos = sum(working_times) / len(working_times)
+            horas = int(media_segundos // 3600)
+            minutos = int((media_segundos % 3600) // 60)
+            st.markdown(f"**Tempo médio de atendimento (horas úteis):** {horas}h {minutos}m")
+            
+            fig, ax = plt.subplots()
+            ax.hist(working_times, bins=10, color='skyblue', edgecolor='black')
+            ax.set_title("Distribuição dos Tempos de Atendimento (horas úteis, em segundos)")
+            ax.set_xlabel("Tempo (segundos)")
+            ax.set_ylabel("Frequência")
+            st.pyplot(fig)
     else:
         st.write("Nenhum chamado técnico encontrado.")
     
+    # Exibe o inventário completo (opcionalmente pode filtrar por período, se houver data de cadastro)
+    inventario_data = get_machines_from_inventory()
     if inventario_data:
         st.markdown("### Inventário")
         st.dataframe(pd.DataFrame(inventario_data))
     else:
         st.write("Nenhum item de inventário encontrado.")
-    
-    # Exemplo de gráfico: Tempo médio de atendimento
-    # Supondo que calculate_working_hours retorne um objeto timedelta em segundos para cada chamado finalizado
-    try:
-        # Filtra chamados finalizados com tempo de atendimento (campo hora_fechamento preenchido)
-        finalizados = [c for c in chamados if c.get("hora_fechamento")]
-        if finalizados:
-            tempos = []
-            for c in finalizados:
-                # Supondo que cada chamado tem 'hora_abertura' e 'hora_fechamento' em formato '%d/%m/%Y %H:%M:%S'
-                from datetime import datetime
-                try:
-                    abertura = datetime.strptime(c["hora_abertura"], '%d/%m/%Y %H:%M:%S')
-                    fechamento = datetime.strptime(c["hora_fechamento"], '%d/%m/%Y %H:%M:%S')
-                    # Aqui, consideramos o tempo total em segundos (você pode ajustar para apenas horas úteis)
-                    tempo_segundos = (fechamento - abertura).total_seconds()
-                    tempos.append(tempo_segundos)
-                except Exception as e:
-                    print(f"Erro ao calcular tempo para chamado {c['id']}: {e}")
-            if tempos:
-                media_segundos = sum(tempos) / len(tempos)
-                # Converter para horas e minutos
-                horas = int(media_segundos // 3600)
-                minutos = int((media_segundos % 3600) // 60)
-                st.markdown(f"**Tempo médio de atendimento:** {horas}h {minutos}m")
-                
-                # Exemplo de gráfico de distribuição dos tempos
-                fig, ax = plt.subplots()
-                ax.hist(tempos, bins=10, color='skyblue', edgecolor='black')
-                ax.set_title("Distribuição dos Tempos de Atendimento (s)")
-                ax.set_xlabel("Tempo (segundos)")
-                ax.set_ylabel("Frequência")
-                st.pyplot(fig)
-    except Exception as e:
-        st.error("Erro ao gerar estatísticas de atendimento.")
-        print(f"Erro: {e}")
 
 # Roteamento do menu
 if selected == "Login":
