@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 from supabase_client import supabase
 
 def get_ubs_list():
@@ -12,7 +13,6 @@ def get_ubs_list():
 
 def add_ubs(nome_ubs):
     try:
-        # Tenta inserir; se a UBS já existir, o comando pode ser ignorado (dependendo da política do banco)
         supabase.table("ubs").insert({"nome_ubs": nome_ubs}).execute()
         return True
     except Exception as e:
@@ -38,6 +38,24 @@ def update_ubs(old_name, new_name):
         print(f"Erro ao atualizar UBS: {e}")
         return False
 
+def get_inventario_por_ubs(ubs):
+    try:
+        resp = supabase.table("inventario").select("*").eq("localizacao", ubs).execute()
+        return resp.data if resp.data else []
+    except Exception as e:
+        st.error("Erro ao recuperar inventário.")
+        print(f"Erro: {e}")
+        return []
+
+def get_chamados_por_ubs(ubs):
+    try:
+        resp = supabase.table("chamados").select("*").eq("ubs", ubs).execute()
+        return resp.data if resp.data else []
+    except Exception as e:
+        st.error("Erro ao recuperar chamados técnicos.")
+        print(f"Erro: {e}")
+        return []
+
 def manage_ubs():
     st.subheader("Gerenciar UBSs")
     action = st.selectbox("Ação", ["Listar", "Adicionar", "Editar", "Remover"])
@@ -45,11 +63,26 @@ def manage_ubs():
     if action == "Listar":
         ubs = get_ubs_list()
         if ubs:
-            # Distribui a lista em 3 colunas para melhorar o layout
-            num_colunas = 3
-            colunas = st.columns(num_colunas)
-            for index, ubs_item in enumerate(ubs):
-                colunas[index % num_colunas].write(f"- {ubs_item}")
+            # Exibe cada UBS em um expander para que o usuário possa clicar e visualizar os detalhes
+            for ubs_item in ubs:
+                with st.expander(f"{ubs_item}"):
+                    # Consulta e exibe informações do inventário associadas à UBS
+                    inventario = get_inventario_por_ubs(ubs_item)
+                    if inventario:
+                        st.markdown("**Inventário:**")
+                        df_inv = pd.DataFrame(inventario)
+                        st.dataframe(df_inv)
+                    else:
+                        st.write("Nenhum item de inventário encontrado.")
+                    
+                    # Consulta e exibe os chamados técnicos associados à UBS
+                    chamados = get_chamados_por_ubs(ubs_item)
+                    if chamados:
+                        st.markdown("**Chamados Técnicos:**")
+                        df_chamados = pd.DataFrame(chamados)
+                        st.dataframe(df_chamados)
+                    else:
+                        st.write("Nenhum chamado técnico encontrado.")
         else:
             st.write("Nenhuma UBS cadastrada.")
     
