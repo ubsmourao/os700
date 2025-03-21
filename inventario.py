@@ -81,7 +81,7 @@ def show_inventory_list():
         df = pd.DataFrame(machines)
         st.dataframe(df)
         
-        # Permite selecionar um item para edição/exclusão e visualizar o histórico completo
+        # Permite selecionar um item para edição/exclusão e para ver o histórico completo
         patrimonio_options = df["numero_patrimonio"].unique().tolist()
         selected_patrimonio = st.selectbox("Selecione o patrimônio para visualizar detalhes", patrimonio_options)
         if selected_patrimonio:
@@ -110,12 +110,13 @@ def show_inventory_list():
                         setor_index = 0
                     setor = st.selectbox("Setor", setores_list, index=setor_index)
                     
-                    propria_opcoes = ["Própria", "Locada"]
-                    if item.get("propria_locada") in própria_opcoes:
-                        propria_index = própria_opcoes.index(item.get("propria_locada"))
+                    # Removendo acentos: usamos "propria_options" em vez de "própria_opcoes"
+                    propria_options = ["Própria", "Locada"]
+                    if item.get("propria_locada") in propria_options:
+                        propria_index = propria_options.index(item.get("propria_locada"))
                     else:
-                        própria_index = 0
-                    propria_locada = st.selectbox("Própria/Locada", própria_opcoes, index=própria_index)
+                        propria_index = 0
+                    propria_locada = st.selectbox("Própria/Locada", propria_options, index=propria_index)
                     
                     submit = st.form_submit_button("Atualizar Item")
                     if submit:
@@ -135,16 +136,14 @@ def show_inventory_list():
                     delete_inventory_item(selected_patrimonio)
             
             with st.expander("Histórico Completo da Máquina"):
-                # Histórico de Chamados Técnicos
                 st.markdown("**Chamados Técnicos:**")
-                from chamados import get_chamados_por_patrimonio  # Import local para evitar circularidade
+                from chamados import get_chamados_por_patrimonio  # Import local
                 chamados = get_chamados_por_patrimonio(selected_patrimonio)
                 if chamados:
                     st.dataframe(pd.DataFrame(chamados))
                 else:
                     st.write("Nenhum chamado técnico encontrado para este item.")
                 
-                # Histórico de Peças Utilizadas
                 st.markdown("**Peças Utilizadas:**")
                 pecas = get_pecas_usadas_por_patrimonio(selected_patrimonio)
                 if pecas:
