@@ -77,9 +77,15 @@ def finalizar_chamado(id_chamado, solucao, pecas_usadas=None):
                     "peca_nome": peca,
                     "data_uso": hora_fechamento
                 }).execute()
-        # Insere histórico de manutenção
-        chamado = supabase.table("chamados").select("patrimonio").eq("id", id_chamado).execute().data[0]
-        patrimonio = chamado.get("patrimonio")
+        
+        # Recupera o patrimônio associado ao chamado para criar o histórico
+        resp = supabase.table("chamados").select("patrimonio").eq("id", id_chamado).execute()
+        if resp.data and len(resp.data) > 0:
+            chamado = resp.data[0]
+            patrimonio = chamado.get("patrimonio")
+        else:
+            patrimonio = None
+
         if patrimonio:
             descricao = f"Manutenção: {solucao}. Peças: {', '.join(pecas_usadas) if pecas_usadas else 'Nenhuma'}."
             supabase.table("historico_manutencao").insert({
