@@ -3,7 +3,7 @@ import os
 import logging
 import pandas as pd
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
+from datetime import datetime
 from streamlit_option_menu import option_menu
 
 # Importação dos módulos e funções
@@ -19,7 +19,7 @@ from chamados import (
 from inventario import show_inventory_list, cadastro_maquina, get_machines_from_inventory
 from ubs import get_ubs_list
 from setores import get_setores_list
-from estoque import manage_estoque
+from estoque import manage_estoque, get_estoque
 
 # Configuração do logging
 logging.basicConfig(level=logging.INFO)
@@ -40,7 +40,7 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# Definição do menu com base no login e privilégios
+# Definição do menu conforme login e privilégios
 if st.session_state.logged_in:
     if is_admin(st.session_state.username):
         menu_options = [
@@ -169,41 +169,88 @@ def abrir_chamado():
 def finalizar_chamado_func():
     st.subheader("Finalizar Chamado Técnico")
     chamados_abertos = list_chamados_em_aberto()
-    if chamados_abertos:
-        df = pd.DataFrame(chamados_abertos)
-        st.dataframe(df)
-        chamado_ids = df["id"].tolist()
-        chamado_selecionado = st.selectbox("Selecione o ID do chamado para finalizar", chamado_ids)
-        solucao = st.text_area("Informe a solução do chamado")
-        if st.button("Finalizar Chamado"):
-            if solucao:
-                finalizar_chamado(chamado_selecionado, solucao)
-            else:
-                st.error("Informe a solução para finalizar o chamado.")
-    else:
+    if not chamados_abertos:
         st.write("Nenhum chamado em aberto.")
+        return
+    df = pd.DataFrame(chamados_abertos)
+    st.dataframe(df)
+    chamado_ids = df["id"].tolist()
+    chamado_selecionado = st.selectbox("Selecione o ID do chamado para finalizar", chamado_ids)
+    solucao = st.text_area("Informe a solução do chamado")
+    
+    # Seleção de peças utilizadas a partir do estoque
+    estoque_data = get_estoque()  # Deve retornar uma lista de dicionários com a chave "nome"
+    if estoque_data:
+        pieces_list = [item["nome"] for item in estoque_data]
+    else:
+        pieces_list = []
+    pecas_selecionadas = st.multiselect("Selecione as peças utilizadas", pieces_list)
+    
+    if st.button("Finalizar Chamado"):
+        if solucao:
+            finalizar_chamado(chamado_selecionado, solucao, pecas_usadas=pecas_selecionadas)
+        else:
+            st.error("Informe a solução para finalizar o chamado.")
 
 def chamados_tecnicos():
     st.subheader("Chamados Técnicos")
     chamados = list_chamados()
-    if chamados:
-        # Calcula o tempo decorrido para cada chamado finalizado e adiciona como coluna
-        df = pd.DataFrame(chamados)
-        def calcula_tempo(row):
-            if pd.notnull(row.get("hora_fechamento")):
-                try:
-                    abertura = datetime.strptime(row["hora_abertura"], '%d/%m/%Y %H:%M:%S')
-                    fechamento = datetime.strptime(row["hora_fechamento"], '%d/%m/%Y %H:%M:%S')
-                    tempo_util = calculate_working_hours(abertura, fechamento)
-                    return str(tempo_util)
-                except Exception as e:
-                    return "Erro"
-            else:
-                return ""
-        df["Tempo Util (hh:mm:ss)"] = df.apply(calcula_tempo, axis=1)
-        st.dataframe(df)
-    else:
+    if not chamados:
         st.write("Nenhum chamado técnico encontrado.")
+        return
+    df = pd.DataFrame(chamados)
+    # Adiciona coluna com tempo util decorrido (se finalizado)
+    def calcula_tempo(row):
+        if pd.notnull(row.get("hora_fechamento")):
+            try:
+                abertura = datetime.strptime(row["hora_abertura"], '%d/%m/%Y %H:%M:%S')
+                fechamento = datetime.strptime(row["hora_fechamento"], '%d/%m/%Y %H:%M:%S')
+                tempo_util = calculate_working_hours(abertura, fechamento)
+                return str(tempo_util)
+            except Exception as e:
+                return "Erro"
+        else:
+            return "Em aberto"
+    df["Tempo Util"] = df.apply(calcula_tempo, axis=1)
+    st.dataframe(df)
+    
+    # Permite finalizar diretamente um chamado em aberto
+    df_aberto = df[pd.isnull(df["hora_fechamento"])]
+    if df_aberto.empty:
+        st.write("Não há chamados abertos para finalizar.")
+    else:
+        chamado_id = st.selectbox("Selecione o ID do chamado em aberto para finalizar", df_aberto["id"].tolist())
+        # Exibe os detalhes do chamado selecionado
+        chamado = df_aberto[df_aberto["id"] == chamado_id].iloc[0]
+        st.markdown(f"### Finalizar Chamado {chamado_id}")
+        st.write(f"Problema: {chamado['problema']}")
+        # Define opções de solução de acordo com o tipo de defeito (ajuste conforme necessidade)
+        if "impressora" in chamado.get("tipo_defeito", "").lower():
+            solucao_options = [
+                "Limpeza e recalibração da impressora",
+                "Substituição de cartucho/toner",
+                "Verificação de conexão e drivers",
+                "Reinicialização da impressora"
+            ]
+        else:
+            solucao_options = [
+                "Reinicialização do sistema",
+                "Atualização de drivers/software",
+                "Substituição de componente (ex.: HD, memória)",
+                "Verificação de vírus/malware"
+            ]
+        solucao_selecionada = st.selectbox("Selecione a solução", solucao_options)
+        solucao_complementar = st.text_area("Detalhes adicionais (opcional)")
+        solucao_final = solucao_selecionada
+        if solucao_complementar:
+            solucao_final += " - " + solucao_complementar
+        
+        # Seleção de peças do estoque já foi feita acima na finalização de chamado
+        if st.button("Finalizar Chamado"):
+            if solucao_final:
+                finalizar_chamado(chamado_id, solucao_final, pecas_usadas=pecas_selecionadas)
+            else:
+                st.error("Informe a solução para finalizar o chamado.")
 
 def inventario():
     st.subheader("Inventário")
@@ -224,7 +271,6 @@ def administracao():
         "Gerenciar Setores",
         "Lista de Usuários"
     ])
-    
     if admin_option == "Cadastro de Usuário":
         novo_user = st.text_input("Novo Usuário")
         nova_senha = st.text_input("Senha", type="password")
@@ -255,27 +301,23 @@ def relatorios():
         start_date = st.date_input("Data Início")
     with col2:
         end_date = st.date_input("Data Fim")
-    
     if start_date > end_date:
         st.error("Data Início não pode ser maior que Data Fim")
         return
-
-    # Converte as datas para datetime
+    
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
     
-    # Filtra chamados com base na data de abertura
+    # Filtra chamados pelo período (data de abertura)
     chamados = list_chamados()
     if chamados:
         df_chamados = pd.DataFrame(chamados)
-        # Converte a coluna de data
         df_chamados["hora_abertura_dt"] = pd.to_datetime(df_chamados["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
         chamados_period = df_chamados[(df_chamados["hora_abertura_dt"] >= start_datetime) & (df_chamados["hora_abertura_dt"] <= end_datetime)]
         st.markdown("### Chamados Técnicos no Período")
         st.dataframe(chamados_period)
         
         # Calcula o tempo médio de atendimento em horas úteis
-        from datetime import datetime
         working_times = []
         for idx, row in chamados_period.iterrows():
             if pd.notnull(row.get("hora_fechamento")):
@@ -301,7 +343,7 @@ def relatorios():
     else:
         st.write("Nenhum chamado técnico encontrado.")
     
-    # Exibe o inventário completo (opcionalmente pode filtrar por período, se houver data de cadastro)
+    # Exibe o inventário completo (opcional)
     inventario_data = get_machines_from_inventory()
     if inventario_data:
         st.markdown("### Inventário")
