@@ -40,13 +40,12 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# Definição do menu conforme status de login e privilégios
+# Definição do menu conforme status de login e privilégios (sem opção separada para Finalizar Chamado)
 if st.session_state.logged_in:
     if is_admin(st.session_state.username):
         menu_options = [
             "Home",
             "Abrir Chamado",
-            "Finalizar Chamado",
             "Chamados Técnicos",
             "Inventário",
             "Estoque",
@@ -58,7 +57,6 @@ if st.session_state.logged_in:
         menu_options = [
             "Home",
             "Abrir Chamado",
-            "Finalizar Chamado",
             "Chamados Técnicos",
             "Inventário",
             "Estoque",
@@ -70,7 +68,7 @@ else:
 
 selected = option_menu("Menu", menu_options, orientation="horizontal")
 
-# Funções individuais para cada página:
+# --- Funções das páginas ---
 
 def login_page():
     st.subheader("Login")
@@ -161,29 +159,6 @@ def abrir_chamado_page():
         else:
             st.error("Erro ao abrir chamado.")
 
-def finalizar_chamado_func():
-    st.subheader("Finalizar Chamado Técnico")
-    chamados_abertos = list_chamados_em_aberto()
-    if not chamados_abertos:
-        st.write("Nenhum chamado em aberto.")
-        return
-    df = pd.DataFrame(chamados_abertos)
-    st.dataframe(df)
-    chamado_ids = df["id"].tolist()
-    chamado_selecionado = st.selectbox("Selecione o ID do chamado para finalizar", chamado_ids)
-    solucao = st.text_area("Informe a solução do chamado")
-    
-    # Integração com o estoque: seleção de peças disponíveis
-    estoque_data = get_estoque()
-    pieces_list = [item["nome"] for item in estoque_data] if estoque_data else []
-    pecas_selecionadas = st.multiselect("Selecione as peças utilizadas (se houver)", pieces_list)
-    
-    if st.button("Finalizar Chamado"):
-        if solucao:
-            finalizar_chamado(chamado_selecionado, solucao, pecas_usadas=pecas_selecionadas)
-        else:
-            st.error("Informe a solução para finalizar o chamado.")
-
 def chamados_tecnicos_page():
     st.subheader("Chamados Técnicos")
     chamados = list_chamados()
@@ -205,15 +180,16 @@ def chamados_tecnicos_page():
     df["Tempo Util"] = df.apply(calcula_tempo, axis=1)
     st.dataframe(df)
     
-    # Permite finalizar um chamado em aberto diretamente
+    # Finalização de chamado integrada na mesma página
     df_aberto = df[df["hora_fechamento"].isnull()]
     if df_aberto.empty:
         st.write("Não há chamados abertos para finalizar.")
     else:
         st.markdown("### Finalizar Chamado Técnico")
-        chamado_id = st.selectbox("Selecione o ID do chamado em aberto para finalizar", df_aberto["id"].tolist())
+        chamado_id = st.selectbox("Selecione o ID do chamado para finalizar", df_aberto["id"].tolist())
         chamado = df_aberto[df_aberto["id"] == chamado_id].iloc[0]
         st.write(f"Problema: {chamado['problema']}")
+        # Opções de solução diferenciadas conforme o tipo de defeito
         if "impressora" in chamado.get("tipo_defeito", "").lower():
             solucao_options = [
                 "Limpeza e recalibração da impressora",
@@ -232,10 +208,10 @@ def chamados_tecnicos_page():
         solucao_complementar = st.text_area("Detalhes adicionais da solução (opcional)")
         solucao_final = solucao_selecionada + ((" - " + solucao_complementar) if solucao_complementar else "")
         
-        # Seleção de peças utilizadas (caso queira atualizar o multiselect)
+        # Seleção de peças utilizadas: multiselect com peças do estoque
         estoque_data = get_estoque()
         pieces_list = [item["nome"] for item in estoque_data] if estoque_data else []
-        pecas_selecionadas = st.multiselect("Selecione as peças utilizadas", pieces_list)
+        pecas_selecionadas = st.multiselect("Selecione as peças utilizadas (se houver)", pieces_list)
         
         if st.button("Finalizar Chamado"):
             if solucao_final:
@@ -295,11 +271,10 @@ def relatorios_page():
     if start_date > end_date:
         st.error("Data Início não pode ser maior que Data Fim")
         return
-    
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
     
-    # Filtra chamados pelo período com base na hora de abertura
+    # Filtra chamados pelo período (baseado em hora_abertura)
     chamados = list_chamados()
     if chamados:
         df_chamados = pd.DataFrame(chamados)
@@ -343,12 +318,11 @@ def relatorios_page():
 def sair_page():
     logout()
 
-# Mapeamento de páginas
+# Mapeamento das páginas
 pages = {
     "Login": login_page,
     "Home": home_page,
     "Abrir Chamado": abrir_chamado_page,
-    "Finalizar Chamado": finalizar_chamado_func,
     "Chamados Técnicos": chamados_tecnicos_page,
     "Inventário": inventario_page,
     "Estoque": estoque_page,
