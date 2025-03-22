@@ -64,18 +64,16 @@ def add_chamado(username, ubs, setor, tipo_defeito, problema, machine=None, patr
 def finalizar_chamado(id_chamado, solucao, pecas_usadas=None):
     try:
         hora_fechamento = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-        # Atualiza o chamado com a solução e a hora de fechamento
         supabase.table("chamados").update({
             "solucao": solucao,
             "hora_fechamento": hora_fechamento
         }).eq("id", id_chamado).execute()
         
-        # Se pecas_usadas não foi passada, pode ser solicitada via text_area (fallback)
+        # Se nenhuma entrada de peças for fornecida, usa uma entrada padrão (mas idealmente, no OS700.py, você fornecerá o multiselect)
         if pecas_usadas is None:
             pecas_input = st.text_area("Informe as peças utilizadas (separadas por vírgula)")
             pecas_usadas = [p.strip() for p in pecas_input.split(",") if p.strip()] if pecas_input else []
         
-        # Insere cada peça utilizada
         if pecas_usadas:
             for peca in pecas_usadas:
                 supabase.table("pecas_usadas").insert({
@@ -83,8 +81,10 @@ def finalizar_chamado(id_chamado, solucao, pecas_usadas=None):
                     "peca_nome": peca,
                     "data_uso": hora_fechamento
                 }).execute()
+                # Dar baixa no estoque para cada peça utilizada
+                from estoque import dar_baixa_estoque
+                dar_baixa_estoque(peca, quantidade_usada=1)
         
-        # Atualiza o histórico de manutenção se houver patrimônio associado
         resp = supabase.table("chamados").select("patrimonio").eq("id", id_chamado).execute()
         if resp.data and len(resp.data) > 0:
             patrimonio = resp.data[0].get("patrimonio")
