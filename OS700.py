@@ -3,8 +3,9 @@ import os
 import logging
 import pandas as pd
 import matplotlib.pyplot as plt
-from datetime import datetime
+from datetime import datetime, timedelta
 from streamlit_option_menu import option_menu
+from fpdf import FPDF  # Para geração de PDF
 
 # Importação dos módulos e funções
 from autenticacao import authenticate, add_user, is_admin, list_users
@@ -40,7 +41,7 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# Definição do menu conforme status de login e privilégios (sem opção separada para Finalizar Chamado)
+# Definição do menu conforme status de login e privilégios
 if st.session_state.logged_in:
     if is_admin(st.session_state.username):
         menu_options = [
@@ -68,7 +69,7 @@ else:
 
 selected = option_menu("Menu", menu_options, orientation="horizontal")
 
-# --- Funções das páginas ---
+# --- Funções das Páginas ---
 
 def login_page():
     st.subheader("Login")
@@ -180,7 +181,7 @@ def chamados_tecnicos_page():
     df["Tempo Util"] = df.apply(calcula_tempo, axis=1)
     st.dataframe(df)
     
-    # Finalização de chamado integrada na mesma página
+    # Finalização integrada no painel de chamados técnicos
     df_aberto = df[df["hora_fechamento"].isnull()]
     if df_aberto.empty:
         st.write("Não há chamados abertos para finalizar.")
@@ -189,7 +190,6 @@ def chamados_tecnicos_page():
         chamado_id = st.selectbox("Selecione o ID do chamado para finalizar", df_aberto["id"].tolist())
         chamado = df_aberto[df_aberto["id"] == chamado_id].iloc[0]
         st.write(f"Problema: {chamado['problema']}")
-        # Opções de solução diferenciadas conforme o tipo de defeito
         if "impressora" in chamado.get("tipo_defeito", "").lower():
             solucao_options = [
                 "Limpeza e recalibração da impressora",
@@ -207,12 +207,9 @@ def chamados_tecnicos_page():
         solucao_selecionada = st.selectbox("Selecione a solução", solucao_options)
         solucao_complementar = st.text_area("Detalhes adicionais da solução (opcional)")
         solucao_final = solucao_selecionada + ((" - " + solucao_complementar) if solucao_complementar else "")
-        
-        # Seleção de peças utilizadas: multiselect com peças do estoque
         estoque_data = get_estoque()
         pieces_list = [item["nome"] for item in estoque_data] if estoque_data else []
         pecas_selecionadas = st.multiselect("Selecione as peças utilizadas (se houver)", pieces_list)
-        
         if st.button("Finalizar Chamado"):
             if solucao_final:
                 finalizar_chamado(chamado_id, solucao_final, pecas_usadas=pecas_selecionadas)
@@ -261,60 +258,137 @@ def administracao_page():
             st.write("Nenhum usuário cadastrado.")
 
 def relatorios_page():
-    st.subheader("Relatórios Completos")
-    st.markdown("### Seleção de Período")
-    col1, col2 = st.columns(2)
+    st.subheader("Relatórios Completos - Estatísticas")
+    st.markdown("### Filtros")
+    col1, col2, col3 = st.columns(3)
     with col1:
         start_date = st.date_input("Data Início")
     with col2:
         end_date = st.date_input("Data Fim")
+    with col3:
+        filtro_ubs = st.multiselect("Filtrar por UBS", get_ubs_list())
     if start_date > end_date:
         st.error("Data Início não pode ser maior que Data Fim")
         return
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
     
-    # Filtra chamados pelo período (baseado em hora_abertura)
+    # Obtém e filtra chamados
     chamados = list_chamados()
-    if chamados:
-        df_chamados = pd.DataFrame(chamados)
-        df_chamados["hora_abertura_dt"] = pd.to_datetime(df_chamados["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
-        chamados_period = df_chamados[(df_chamados["hora_abertura_dt"] >= start_datetime) & (df_chamados["hora_abertura_dt"] <= end_datetime)]
-        st.markdown("### Chamados Técnicos no Período")
-        st.dataframe(chamados_period)
-        
-        working_times = []
-        for idx, row in chamados_period.iterrows():
-            if pd.notnull(row.get("hora_fechamento")):
-                try:
-                    abertura = datetime.strptime(row["hora_abertura"], '%d/%m/%Y %H:%M:%S')
-                    fechamento = datetime.strptime(row["hora_fechamento"], '%d/%m/%Y %H:%M:%S')
-                    tempo_util = calculate_working_hours(abertura, fechamento)
-                    working_times.append(tempo_util.total_seconds())
-                except Exception as e:
-                    print(f"Erro ao calcular tempo para chamado {row.get('id')}: {e}")
-        if working_times:
-            media_segundos = sum(working_times) / len(working_times)
-            horas = int(media_segundos // 3600)
-            minutos = int((media_segundos % 3600) // 60)
-            st.markdown(f"**Tempo médio de atendimento (horas úteis):** {horas}h {minutos}m")
-            
-            fig, ax = plt.subplots()
-            ax.hist(working_times, bins=10, color='skyblue', edgecolor='black')
-            ax.set_title("Distribuição dos Tempos de Atendimento (horas úteis, em segundos)")
-            ax.set_xlabel("Tempo (segundos)")
-            ax.set_ylabel("Frequência")
-            st.pyplot(fig)
-    else:
+    if not chamados:
         st.write("Nenhum chamado técnico encontrado.")
+        return
+    df = pd.DataFrame(chamados)
+    df["hora_abertura_dt"] = pd.to_datetime(df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
+    df_period = df[(df["hora_abertura_dt"] >= start_datetime) & (df["hora_abertura_dt"] <= end_datetime)]
+    if filtro_ubs:
+        df_period = df_period[df_period["ubs"].isin(filtro_ubs)]
+    st.markdown("### Chamados Técnicos no Período")
+    st.dataframe(df_period)
     
-    inventario_data = get_machines_from_inventory()
-    if inventario_data:
-        st.markdown("### Inventário")
-        st.dataframe(pd.DataFrame(inventario_data))
+    # Estatística 1: Chamados por UBS por Mês
+    df_period["mes"] = df_period["hora_abertura_dt"].dt.to_period("M").astype(str)
+    chamados_ubs_mes = df_period.groupby(["ubs", "mes"]).size().reset_index(name="qtd_chamados")
+    st.markdown("#### Chamados por UBS por Mês")
+    st.dataframe(chamados_ubs_mes)
+    fig1, ax1 = plt.subplots(figsize=(8,4))
+    for ubs in chamados_ubs_mes["ubs"].unique():
+        dados = chamados_ubs_mes[chamados_ubs_mes["ubs"] == ubs]
+        ax1.plot(dados["mes"], dados["qtd_chamados"], marker="o", label=ubs)
+    ax1.set_xlabel("Mês")
+    ax1.set_ylabel("Quantidade de Chamados")
+    ax1.set_title("Chamados por UBS por Mês")
+    ax1.legend()
+    plt.xticks(rotation=45)
+    st.pyplot(fig1)
+    
+    # Estatística 2: Chamados por Setor (identificando setores problemáticos)
+    chamados_setor = df_period.groupby("setor").size().reset_index(name="qtd_chamados")
+    st.markdown("#### Chamados por Setor")
+    st.dataframe(chamados_setor)
+    fig2, ax2 = plt.subplots(figsize=(8,4))
+    ax2.bar(chamados_setor["setor"], chamados_setor["qtd_chamados"], color='orange')
+    ax2.set_xlabel("Setor")
+    ax2.set_ylabel("Quantidade de Chamados")
+    ax2.set_title("Chamados por Setor")
+    plt.xticks(rotation=45, ha="right")
+    st.pyplot(fig2)
+    
+    # Estatística 3: Tempo médio de atendimento por UBS e global (horas úteis)
+    def calc_tempo(row):
+        if pd.notnull(row["hora_fechamento"]):
+            try:
+                abertura = datetime.strptime(row["hora_abertura"], '%d/%m/%Y %H:%M:%S')
+                fechamento = datetime.strptime(row["hora_fechamento"], '%d/%m/%Y %H:%M:%S')
+                tempo_util = calculate_working_hours(abertura, fechamento)
+                return tempo_util.total_seconds()
+            except Exception as e:
+                return None
+        else:
+            return None
+    df_period["tempo_util_seg"] = df_period.apply(calc_tempo, axis=1)
+    df_valid = df_period.dropna(subset=["tempo_util_seg"])
+    if not df_valid.empty:
+        tempo_medio_ubs = df_valid.groupby("ubs")["tempo_util_seg"].mean().reset_index()
+        tempo_medio_ubs["Tempo Médio"] = tempo_medio_ubs["tempo_util_seg"].apply(
+            lambda x: f"{int(x//3600)}h {int((x%3600)//60)}m"
+        )
+        st.markdown("#### Tempo Médio de Atendimento por UBS (horas úteis)")
+        st.dataframe(tempo_medio_ubs[["ubs", "Tempo Médio"]])
+        fig3, ax3 = plt.subplots(figsize=(8,4))
+        ax3.bar(tempo_medio_ubs["ubs"], tempo_medio_ubs["tempo_util_seg"], color='green')
+        ax3.set_xlabel("UBS")
+        ax3.set_ylabel("Tempo Médio (segundos)")
+        ax3.set_title("Tempo Médio de Atendimento por UBS")
+        plt.xticks(rotation=45, ha="right")
+        st.pyplot(fig3)
+        
+        media_global = df_valid["tempo_util_seg"].mean()
+        horas_global = int(media_global // 3600)
+        minutos_global = int((media_global % 3600) // 60)
+        st.markdown(f"**Tempo médio global de atendimento (horas úteis):** {horas_global}h {minutos_global}m")
     else:
-        st.write("Nenhum item de inventário encontrado.")
-
+        st.write("Nenhum chamado finalizado no período para calcular tempo médio.")
+    
+    # Geração de PDF
+    if st.button("Gerar Relatório em PDF"):
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(0, 10, "Relatório Completo - Gestão de Parque de Informatica", ln=True, align="C")
+        pdf.ln(10)
+        
+        pdf.set_font("Arial", "", 12)
+        pdf.cell(0, 10, f"Período: {start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')}", ln=True)
+        pdf.ln(5)
+        
+        # Chamados por UBS por Mês
+        pdf.cell(0, 10, "Chamados por UBS por Mês:", ln=True)
+        for idx, row in chamados_ubs_mes.iterrows():
+            pdf.cell(0, 8, f"UBS: {row['ubs']} - Mês: {row['mes']} - Quantidade: {row['qtd_chamados']}", ln=True)
+        pdf.ln(5)
+        
+        # Chamados por Setor
+        pdf.cell(0, 10, "Chamados por Setor:", ln=True)
+        for idx, row in chamados_setor.iterrows():
+            pdf.cell(0, 8, f"Setor: {row['setor']} - Quantidade: {row['qtd_chamados']}", ln=True)
+        pdf.ln(5)
+        
+        # Tempo médio por UBS
+        pdf.cell(0, 10, "Tempo Médio de Atendimento por UBS (horas úteis):", ln=True)
+        if not df_valid.empty:
+            for idx, row in tempo_medio_ubs.iterrows():
+                pdf.cell(0, 8, f"UBS: {row['ubs']} - Tempo Médio: {row['Tempo Médio']}", ln=True)
+        pdf.ln(5)
+        
+        # Tempo médio global
+        if not df_valid.empty:
+            pdf.cell(0, 10, f"Tempo médio global de atendimento (horas úteis): {horas_global}h {minutos_global}m", ln=True)
+        
+        # Salva o PDF em um buffer e permite download
+        pdf_output = pdf.output(dest="S").encode("latin1")
+        st.download_button("Baixar PDF", data=pdf_output, file_name="relatorio.pdf", mime="application/pdf")
+        
 def sair_page():
     logout()
 
