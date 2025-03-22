@@ -40,12 +40,13 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# Definição do menu conforme login e privilégios
+# Definição do menu conforme o status de login e privilégios
 if st.session_state.logged_in:
     if is_admin(st.session_state.username):
         menu_options = [
             "Home",
             "Abrir Chamado",
+            "Finalizar Chamado",
             "Chamados Técnicos",
             "Inventário",
             "Estoque",
@@ -57,6 +58,7 @@ if st.session_state.logged_in:
         menu_options = [
             "Home",
             "Abrir Chamado",
+            "Finalizar Chamado",
             "Chamados Técnicos",
             "Inventário",
             "Estoque",
@@ -164,6 +166,32 @@ def abrir_chamado():
         else:
             st.error("Erro ao abrir chamado.")
 
+def finalizar_chamado_func():
+    st.subheader("Finalizar Chamado Técnico")
+    chamados_abertos = list_chamados_em_aberto()
+    if not chamados_abertos:
+        st.write("Nenhum chamado em aberto.")
+        return
+    df = pd.DataFrame(chamados_abertos)
+    st.dataframe(df)
+    chamado_ids = df["id"].tolist()
+    chamado_selecionado = st.selectbox("Selecione o ID do chamado para finalizar", chamado_ids)
+    solucao = st.text_area("Informe a solução do chamado")
+    
+    # Integração com o estoque: obtém as peças disponíveis
+    estoque_data = get_estoque()
+    if estoque_data:
+        pieces_list = [item["nome"] for item in estoque_data]
+    else:
+        pieces_list = []
+    pecas_selecionadas = st.multiselect("Selecione as peças utilizadas (se houver)", pieces_list)
+    
+    if st.button("Finalizar Chamado"):
+        if solucao:
+            finalizar_chamado(chamado_selecionado, solucao, pecas_usadas=pecas_selecionadas)
+        else:
+            st.error("Informe a solução para finalizar o chamado.")
+
 def chamados_tecnicos():
     st.subheader("Chamados Técnicos")
     chamados = list_chamados()
@@ -171,7 +199,6 @@ def chamados_tecnicos():
         st.write("Nenhum chamado técnico encontrado.")
         return
     df = pd.DataFrame(chamados)
-    # Adiciona coluna com tempo útil decorrido (se finalizado)
     def calcula_tempo(row):
         if pd.notnull(row.get("hora_fechamento")):
             try:
@@ -186,18 +213,16 @@ def chamados_tecnicos():
     df["Tempo Util"] = df.apply(calcula_tempo, axis=1)
     st.dataframe(df)
     
-    # Permite finalizar um chamado em aberto diretamente do painel
+    # Permite finalizar um chamado em aberto diretamente
     df_aberto = df[df["hora_fechamento"].isnull()]
     if df_aberto.empty:
         st.write("Não há chamados abertos para finalizar.")
     else:
         st.markdown("### Finalizar Chamado Técnico")
-        chamado_id = st.selectbox("Selecione o ID do chamado para finalizar", df_aberto["id"].tolist())
-        # Exibe detalhes do chamado selecionado
+        chamado_id = st.selectbox("Selecione o ID do chamado em aberto para finalizar", df_aberto["id"].tolist())
         chamado = df_aberto[df_aberto["id"] == chamado_id].iloc[0]
         st.write(f"Problema: {chamado['problema']}")
         
-        # Opções de solução diferenciadas conforme tipo de defeito (ou outro campo, se disponível)
         if "impressora" in chamado.get("tipo_defeito", "").lower():
             solucao_options = [
                 "Limpeza e recalibração da impressora",
@@ -214,17 +239,15 @@ def chamados_tecnicos():
             ]
         solucao_selecionada = st.selectbox("Selecione a solução", solucao_options)
         solucao_complementar = st.text_area("Detalhes adicionais da solução (opcional)")
-        solucao_final = solucao_selecionada
-        if solucao_complementar:
-            solucao_final += " - " + solucao_complementar
+        solucao_final = solucao_selecionada + ((" - " + solucao_complementar) if solucao_complementar else "")
         
-        # Seleção de peças utilizadas: consulta o estoque para apresentar as peças disponíveis
-        estoque_data = get_estoque()  # Retorna uma lista de dicionários com, pelo menos, a chave "nome"
+        # Se o usuário ainda quiser selecionar peças utilizadas:
+        estoque_data = get_estoque()
         if estoque_data:
             pieces_list = [item["nome"] for item in estoque_data]
         else:
             pieces_list = []
-        pecas_selecionadas = st.multiselect("Selecione as peças utilizadas (se houver)", pieces_list)
+        pecas_selecionadas = st.multiselect("Selecione as peças utilizadas", pieces_list)
         
         if st.button("Finalizar Chamado"):
             if solucao_final:
@@ -288,7 +311,7 @@ def relatorios():
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
     
-    # Filtra chamados pelo período (baseado em hora_abertura)
+    # Filtra chamados pelo período (baseado na hora de abertura)
     chamados = list_chamados()
     if chamados:
         df_chamados = pd.DataFrame(chamados)
@@ -297,7 +320,7 @@ def relatorios():
         st.markdown("### Chamados Técnicos no Período")
         st.dataframe(chamados_period)
         
-        # Calcula o tempo médio de atendimento em horas úteis
+        # Calcula o tempo médio de atendimento (horas úteis)
         working_times = []
         for idx, row in chamados_period.iterrows():
             if pd.notnull(row.get("hora_fechamento")):
@@ -339,8 +362,7 @@ elif selected == "Home":
 elif selected == "Abrir Chamado":
     abrir_chamado()
 elif selected == "Finalizar Chamado":
-    # Agora, finalização de chamado é incorporada em "Chamados Técnicos", mas caso queira uma opção separada:
-    finalizar_chamado_func()  # Se você tiver uma função separada; senão, pode removê-la.
+    finalizar_chamado_func()
 elif selected == "Chamados Técnicos":
     chamados_tecnicos()
 elif selected == "Inventário":
