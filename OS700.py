@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from streamlit_option_menu import option_menu
 
-# Importação dos módulos e funções
+# Importação dos módulos (certifique-se de que estes módulos estão atualizados)
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
     add_chamado,
@@ -24,7 +24,7 @@ from estoque import manage_estoque, get_estoque
 # Configuração do logging
 logging.basicConfig(level=logging.INFO)
 
-# Inicializa variáveis de sessão
+# Inicialização das variáveis de sessão
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
@@ -40,39 +40,8 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# Definição do menu conforme o status de login e privilégios
-if st.session_state.logged_in:
-    if is_admin(st.session_state.username):
-        menu_options = [
-            "Home",
-            "Abrir Chamado",
-            "Finalizar Chamado",
-            "Chamados Técnicos",
-            "Inventário",
-            "Estoque",
-            "Administração",
-            "Relatórios",
-            "Sair"
-        ]
-    else:
-        menu_options = [
-            "Home",
-            "Abrir Chamado",
-            "Finalizar Chamado",
-            "Chamados Técnicos",
-            "Inventário",
-            "Estoque",
-            "Relatórios",
-            "Sair"
-        ]
-else:
-    menu_options = ["Login"]
-
-selected = option_menu("Menu", menu_options, orientation="horizontal")
-
-# --- Funções do Aplicativo ---
-
-def login():
+# Definição das páginas (funções) do app
+def login_page():
     st.subheader("Login")
     username = st.text_input("Usuário")
     password = st.text_input("Senha", type="password")
@@ -86,16 +55,11 @@ def login():
         else:
             st.error("Usuário ou senha incorretos.")
 
-def logout():
-    st.session_state.logged_in = False
-    st.session_state.username = ""
-    st.success("Você saiu.")
-
-def home():
+def home_page():
     st.subheader("Bem-vindo!")
     st.write("Selecione uma opção no menu para começar.")
 
-def abrir_chamado():
+def abrir_chamado_page():
     st.subheader("Abrir Chamado Técnico")
     patrimonio = st.text_input("Número de Patrimônio (opcional)")
     machine_info = None
@@ -112,13 +76,14 @@ def abrir_chamado():
             setor = machine_info["setor"]
             machine_type = machine_info["tipo"]
         else:
-            st.error("Patrimônio não encontrado no inventário. Cadastre a máquina no inventário antes de abrir o chamado.")
+            st.error("Patrimônio não encontrado no inventário. Cadastre a máquina antes de abrir o chamado.")
             st.stop()
     else:
         ubs_selecionada = st.selectbox("UBS", get_ubs_list())
         setor = st.selectbox("Setor", get_setores_list())
         machine_type = st.selectbox("Tipo de Máquina", ["Computador", "Impressora", "Outro"])
 
+    # Opções de defeito conforme o tipo de máquina
     if machine_type == "Computador":
         defect_options = [
             "Computador não liga",
@@ -166,7 +131,7 @@ def abrir_chamado():
         else:
             st.error("Erro ao abrir chamado.")
 
-def finalizar_chamado_func():
+def finalizar_chamado_page():
     st.subheader("Finalizar Chamado Técnico")
     chamados_abertos = list_chamados_em_aberto()
     if not chamados_abertos:
@@ -178,12 +143,9 @@ def finalizar_chamado_func():
     chamado_selecionado = st.selectbox("Selecione o ID do chamado para finalizar", chamado_ids)
     solucao = st.text_area("Informe a solução do chamado")
     
-    # Integração com o estoque: obtém as peças disponíveis
+    # Seleção das peças utilizadas do estoque
     estoque_data = get_estoque()
-    if estoque_data:
-        pieces_list = [item["nome"] for item in estoque_data]
-    else:
-        pieces_list = []
+    pieces_list = [item["nome"] for item in estoque_data] if estoque_data else []
     pecas_selecionadas = st.multiselect("Selecione as peças utilizadas (se houver)", pieces_list)
     
     if st.button("Finalizar Chamado"):
@@ -192,7 +154,7 @@ def finalizar_chamado_func():
         else:
             st.error("Informe a solução para finalizar o chamado.")
 
-def chamados_tecnicos():
+def chamados_tecnicos_page():
     st.subheader("Chamados Técnicos")
     chamados = list_chamados()
     if not chamados:
@@ -213,7 +175,7 @@ def chamados_tecnicos():
     df["Tempo Util"] = df.apply(calcula_tempo, axis=1)
     st.dataframe(df)
     
-    # Permite finalizar um chamado em aberto diretamente
+    # Permite finalizar diretamente um chamado em aberto
     df_aberto = df[df["hora_fechamento"].isnull()]
     if df_aberto.empty:
         st.write("Não há chamados abertos para finalizar.")
@@ -222,7 +184,6 @@ def chamados_tecnicos():
         chamado_id = st.selectbox("Selecione o ID do chamado em aberto para finalizar", df_aberto["id"].tolist())
         chamado = df_aberto[df_aberto["id"] == chamado_id].iloc[0]
         st.write(f"Problema: {chamado['problema']}")
-        
         if "impressora" in chamado.get("tipo_defeito", "").lower():
             solucao_options = [
                 "Limpeza e recalibração da impressora",
@@ -240,22 +201,17 @@ def chamados_tecnicos():
         solucao_selecionada = st.selectbox("Selecione a solução", solucao_options)
         solucao_complementar = st.text_area("Detalhes adicionais da solução (opcional)")
         solucao_final = solucao_selecionada + ((" - " + solucao_complementar) if solucao_complementar else "")
-        
-        # Se o usuário ainda quiser selecionar peças utilizadas:
+        # Seleção de peças utilizadas
         estoque_data = get_estoque()
-        if estoque_data:
-            pieces_list = [item["nome"] for item in estoque_data]
-        else:
-            pieces_list = []
+        pieces_list = [item["nome"] for item in estoque_data] if estoque_data else []
         pecas_selecionadas = st.multiselect("Selecione as peças utilizadas", pieces_list)
-        
         if st.button("Finalizar Chamado"):
             if solucao_final:
                 finalizar_chamado(chamado_id, solucao_final, pecas_usadas=pecas_selecionadas)
             else:
                 st.error("Informe a solução para finalizar o chamado.")
 
-def inventario():
+def inventario_page():
     st.subheader("Inventário")
     opcao = st.radio("Selecione uma opção:", ["Listar Inventário", "Cadastrar Máquina"])
     if opcao == "Listar Inventário":
@@ -263,10 +219,10 @@ def inventario():
     else:
         cadastro_maquina()
 
-def estoque():
+def estoque_page():
     manage_estoque()
 
-def administracao():
+def administracao_page():
     st.subheader("Administração")
     admin_option = st.selectbox("Opções de Administração", [
         "Cadastro de Usuário",
@@ -296,7 +252,7 @@ def administracao():
         else:
             st.write("Nenhum usuário cadastrado.")
 
-def relatorios():
+def relatorios_page():
     st.subheader("Relatórios Completos")
     st.markdown("### Seleção de Período")
     col1, col2 = st.columns(2)
@@ -307,11 +263,10 @@ def relatorios():
     if start_date > end_date:
         st.error("Data Início não pode ser maior que Data Fim")
         return
-    
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
     
-    # Filtra chamados pelo período (baseado na hora de abertura)
+    # Filtra chamados pelo período (com base em hora_abertura)
     chamados = list_chamados()
     if chamados:
         df_chamados = pd.DataFrame(chamados)
@@ -320,7 +275,7 @@ def relatorios():
         st.markdown("### Chamados Técnicos no Período")
         st.dataframe(chamados_period)
         
-        # Calcula o tempo médio de atendimento (horas úteis)
+        # Calcula tempo médio de atendimento (horas úteis)
         working_times = []
         for idx, row in chamados_period.iterrows():
             if pd.notnull(row.get("hora_fechamento")):
@@ -346,7 +301,6 @@ def relatorios():
     else:
         st.write("Nenhum chamado técnico encontrado.")
     
-    # Exibe o inventário completo (opcional)
     inventario_data = get_machines_from_inventory()
     if inventario_data:
         st.markdown("### Inventário")
@@ -354,24 +308,25 @@ def relatorios():
     else:
         st.write("Nenhum item de inventário encontrado.")
 
-# Roteamento do menu
-if selected == "Login":
-    login()
-elif selected == "Home":
-    home()
-elif selected == "Abrir Chamado":
-    abrir_chamado()
-elif selected == "Finalizar Chamado":
-    finalizar_chamado_func()
-elif selected == "Chamados Técnicos":
-    chamados_tecnicos()
-elif selected == "Inventário":
-    inventario()
-elif selected == "Estoque":
-    estoque()
-elif selected == "Administração":
-    administracao()
-elif selected == "Relatórios":
-    relatorios()
-elif selected == "Sair":
+def sair_page():
     logout()
+
+# Mapeamento de páginas
+pages = {
+    "Login": login_page,
+    "Home": home_page,
+    "Abrir Chamado": abrir_chamado_page,
+    "Finalizar Chamado": finalizar_chamado_func,
+    "Chamados Técnicos": chamados_tecnicos_page,
+    "Inventário": inventario_page,
+    "Estoque": estoque_page,
+    "Administração": administracao_page,
+    "Relatórios": relatorios_page,
+    "Sair": sair_page,
+}
+
+# Roteamento do menu
+if selected in pages:
+    pages[selected]()
+else:
+    st.write("Página não encontrada.")
