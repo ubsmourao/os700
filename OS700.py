@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from streamlit_option_menu import option_menu
-from fpdf import FPDF  # Para geração de PDF
+from fpdf import FPDF
 
 # Importação dos módulos e funções
 from autenticacao import authenticate, add_user, is_admin, list_users
@@ -41,7 +41,7 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# Definição do menu conforme status de login e privilégios
+# Definição do menu (sem opção separada para finalizar chamados; essa funcionalidade está integrada em 'Chamados Técnicos')
 if st.session_state.logged_in:
     if is_admin(st.session_state.username):
         menu_options = [
@@ -69,7 +69,7 @@ else:
 
 selected = option_menu("Menu", menu_options, orientation="horizontal")
 
-# --- Funções das Páginas ---
+# --- Páginas do App ---
 
 def login_page():
     st.subheader("Login")
@@ -207,9 +207,11 @@ def chamados_tecnicos_page():
         solucao_selecionada = st.selectbox("Selecione a solução", solucao_options)
         solucao_complementar = st.text_area("Detalhes adicionais da solução (opcional)")
         solucao_final = solucao_selecionada + ((" - " + solucao_complementar) if solucao_complementar else "")
+        
         estoque_data = get_estoque()
         pieces_list = [item["nome"] for item in estoque_data] if estoque_data else []
         pecas_selecionadas = st.multiselect("Selecione as peças utilizadas (se houver)", pieces_list)
+        
         if st.button("Finalizar Chamado"):
             if solucao_final:
                 finalizar_chamado(chamado_id, solucao_final, pecas_usadas=pecas_selecionadas)
@@ -273,7 +275,7 @@ def relatorios_page():
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
     
-    # Obtém e filtra chamados
+    # Obtém e filtra os chamados
     chamados = list_chamados()
     if not chamados:
         st.write("Nenhum chamado técnico encontrado.")
@@ -302,7 +304,7 @@ def relatorios_page():
     plt.xticks(rotation=45)
     st.pyplot(fig1)
     
-    # Estatística 2: Chamados por Setor (identificando setores problemáticos)
+    # Estatística 2: Chamados por Setor
     chamados_setor = df_period.groupby("setor").size().reset_index(name="qtd_chamados")
     st.markdown("#### Chamados por Setor")
     st.dataframe(chamados_setor)
@@ -350,6 +352,12 @@ def relatorios_page():
     else:
         st.write("Nenhum chamado finalizado no período para calcular tempo médio.")
     
+    # Estatística 4: Chamados por UBS por Mês (detalhado)
+    df_period["mes"] = df_period["hora_abertura_dt"].dt.to_period("M").astype(str)
+    chamados_ubs_detalhado = df_period.groupby(["ubs", "mes"]).size().reset_index(name="qtd_chamados")
+    st.markdown("#### Chamados por UBS por Mês (detalhado)")
+    st.dataframe(chamados_ubs_detalhado)
+    
     # Geração de PDF
     if st.button("Gerar Relatório em PDF"):
         pdf = FPDF()
@@ -362,33 +370,28 @@ def relatorios_page():
         pdf.cell(0, 10, f"Período: {start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')}", ln=True)
         pdf.ln(5)
         
-        # Chamados por UBS por Mês
         pdf.cell(0, 10, "Chamados por UBS por Mês:", ln=True)
-        for idx, row in chamados_ubs_mes.iterrows():
+        for idx, row in chamados_ubs_detalhado.iterrows():
             pdf.cell(0, 8, f"UBS: {row['ubs']} - Mês: {row['mes']} - Quantidade: {row['qtd_chamados']}", ln=True)
         pdf.ln(5)
         
-        # Chamados por Setor
         pdf.cell(0, 10, "Chamados por Setor:", ln=True)
         for idx, row in chamados_setor.iterrows():
             pdf.cell(0, 8, f"Setor: {row['setor']} - Quantidade: {row['qtd_chamados']}", ln=True)
         pdf.ln(5)
         
-        # Tempo médio por UBS
         pdf.cell(0, 10, "Tempo Médio de Atendimento por UBS (horas úteis):", ln=True)
         if not df_valid.empty:
             for idx, row in tempo_medio_ubs.iterrows():
                 pdf.cell(0, 8, f"UBS: {row['ubs']} - Tempo Médio: {row['Tempo Médio']}", ln=True)
         pdf.ln(5)
         
-        # Tempo médio global
         if not df_valid.empty:
             pdf.cell(0, 10, f"Tempo médio global de atendimento (horas úteis): {horas_global}h {minutos_global}m", ln=True)
         
-        # Salva o PDF em um buffer e permite download
         pdf_output = pdf.output(dest="S").encode("latin1")
         st.download_button("Baixar PDF", data=pdf_output, file_name="relatorio.pdf", mime="application/pdf")
-        
+
 def sair_page():
     logout()
 
