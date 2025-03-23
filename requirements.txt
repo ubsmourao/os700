@@ -6,5 +6,5 @@ streamlit-aggrid
 streamlit-option-menu
 matplotlib
 fpdf2
-streamlit‑chat
+streamlit-chat
 
