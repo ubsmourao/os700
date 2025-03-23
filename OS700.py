@@ -6,8 +6,6 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from streamlit_option_menu import option_menu
 from fpdf import FPDF
-
-# Importa a AgGrid para visualização interativa de DataFrames
 from st_aggrid import AgGrid, GridOptionsBuilder
 
 # Importação dos módulos e funções
@@ -44,27 +42,30 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# --- Menu Horizontal (para smartphones) ---
+# --- Menu ---
+# Para melhorar a experiência em smartphones, usamos um menu horizontal.
 if st.session_state.logged_in:
     if is_admin(st.session_state.username):
         menu_options = [
-            "Home",
+            "Dashboard",
             "Abrir Chamado",
             "Chamados Técnicos",
             "Inventário",
             "Estoque",
             "Administração",
             "Relatórios",
+            "Exportar Dados",
             "Sair"
         ]
     else:
         menu_options = [
-            "Home",
+            "Dashboard",
             "Abrir Chamado",
             "Chamados Técnicos",
             "Inventário",
             "Estoque",
             "Relatórios",
+            "Exportar Dados",
             "Sair"
         ]
 else:
@@ -73,7 +74,7 @@ else:
 selected = option_menu(
     menu_title=None,
     options=menu_options,
-    icons=["house", "chat-left-text", "card-list", "clipboard-data", "box-seam", "gear", "bar-chart-line", "box-arrow-right"],
+    icons=["speedometer", "chat-left-text", "card-list", "clipboard-data", "box-seam", "gear", "bar-chart-line", "download", "box-arrow-right"],
     menu_icon="cast",
     default_index=0,
     orientation="horizontal",
@@ -91,7 +92,7 @@ selected = option_menu(
     }
 )
 
-# --- Funções das Páginas ---
+# --- Páginas do App ---
 
 def login_page():
     st.subheader("Login")
@@ -107,13 +108,48 @@ def login_page():
         else:
             st.error("Usuário ou senha incorretos.")
 
-def home_page():
-    st.subheader("Bem-vindo!")
-    st.write("Selecione uma opção no menu para começar.")
+def dashboard_page():
+    st.subheader("Dashboard")
+    # KPIs
+    chamados = list_chamados()
+    total_chamados = len(chamados) if chamados else 0
+    chamados_abertos = len(list_chamados_em_aberto()) if chamados else 0
+    st.metric("Total de Chamados", total_chamados)
+    st.metric("Chamados Abertos", chamados_abertos)
+    
+    # Exibe um gráfico de tendência de chamados por mês (global)
+    if chamados:
+        df = pd.DataFrame(chamados)
+        df["hora_abertura_dt"] = pd.to_datetime(df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
+        df["mes"] = df["hora_abertura_dt"].dt.to_period("M").astype(str)
+        tendencia = df.groupby("mes").size().reset_index(name="qtd")
+        fig, ax = plt.subplots(figsize=(8,4))
+        ax.plot(tendencia["mes"], tendencia["qtd"], marker="o")
+        ax.set_xlabel("Mês")
+        ax.set_ylabel("Quantidade de Chamados")
+        ax.set_title("Tendência de Chamados no Tempo")
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
+        
+        # Notificação: se houver chamados abertos com tempo de atendimento superior a um limiar (ex.: 48h úteis)
+        atrasados = []
+        for c in chamados:
+            if c.get("hora_fechamento") is None:
+                try:
+                    abertura = datetime.strptime(c["hora_abertura"], '%d/%m/%Y %H:%M:%S')
+                    tempo_util = calculate_working_hours(abertura, datetime.now())
+                    if tempo_util > timedelta(hours=48):
+                        atrasados.append(c)
+                except:
+                    pass
+        if atrasados:
+            st.warning(f"Atenção: Existem {len(atrasados)} chamados abertos com mais de 48h úteis de atraso!")
 
 def abrir_chamado_page():
     st.subheader("Abrir Chamado Técnico")
     patrimonio = st.text_input("Número de Patrimônio (opcional)")
+    # Campo opcional para agendar data da manutenção
+    data_agendada = st.date_input("Data Agendada para Manutenção (opcional)")
     machine_info = None
     machine_type = None
     ubs_selecionada = None
@@ -156,12 +192,14 @@ def abrir_chamado_page():
     problema = st.text_area("Descreva o problema ou solicitação")
     
     if st.button("Abrir Chamado"):
+        # Se o usuário agendou uma data, adiciona-a aos dados (opcional)
+        agendamento = data_agendada.strftime('%d/%m/%Y') if data_agendada else None
         protocolo = add_chamado(
             st.session_state.username,
             ubs_selecionada,
             setor,
             tipo_defeito,
-            problema,
+            problema + (f" | Agendamento: {agendamento}" if agendamento else ""),
             patrimonio=patrimonio
         )
         if protocolo:
@@ -188,15 +226,14 @@ def chamados_tecnicos_page():
         else:
             return "Em aberto"
     df["Tempo Util"] = df.apply(calcula_tempo, axis=1)
-    
-    # Utilizando AgGrid para exibir a tabela interativa
+    # Exibe com AgGrid para interatividade
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_pagination(paginationAutoPageSize=True)
     gb.configure_default_column(filter=True, sortable=True)
     grid_options = gb.build()
     AgGrid(df, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
     
-    # Finalização integrada no painel de chamados técnicos
+    # Área para finalizar chamados (com comentários)
     df_aberto = df[df["hora_fechamento"].isnull()]
     if df_aberto.empty:
         st.write("Não há chamados abertos para finalizar.")
@@ -219,13 +256,19 @@ def chamados_tecnicos_page():
         solucao_complementar = st.text_area("Detalhes adicionais da solução (opcional)")
         solucao_final = solucao_selecionada + ((" - " + solucao_complementar) if solucao_complementar else "")
         
+        # Área para inserir comentários (simples, para acompanhamento)
+        comentarios = st.text_area("Comentários adicionais (ex.: instruções para o técnico)")
+        
+        # Seleção de peças utilizadas a partir do estoque
         estoque_data = get_estoque()
         pieces_list = [item["nome"] for item in estoque_data] if estoque_data else []
         pecas_selecionadas = st.multiselect("Selecione as peças utilizadas (se houver)", pieces_list)
         
         if st.button("Finalizar Chamado"):
             if solucao_final:
-                finalizar_chamado(chamado_id, solucao_final, pecas_usadas=pecas_selecionadas)
+                # Você pode concatenar os comentários na solução ou salvá-los em outro registro
+                solucao_final_completa = solucao_final + (f" | Comentários: {comentarios}" if comentarios else "")
+                finalizar_chamado(chamado_id, solucao_final_completa, pecas_usadas=pecas_selecionadas)
             else:
                 st.error("Informe a solução para finalizar o chamado.")
 
@@ -233,15 +276,14 @@ def inventario_page():
     st.subheader("Inventário")
     opcao = st.radio("Selecione uma opção:", ["Listar Inventário", "Cadastrar Máquina"])
     if opcao == "Listar Inventário":
-        # Exibe inventário com AgGrid para melhor interatividade
         inventario_data = get_machines_from_inventory()
         if inventario_data:
             df_inv = pd.DataFrame(inventario_data)
-            gb = GridOptionsBuilder.from_dataframe(df_inv)
-            gb.configure_pagination(paginationAutoPageSize=True)
-            gb.configure_default_column(filter=True, sortable=True)
-            grid_options = gb.build()
-            AgGrid(df_inv, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
+            gb_inv = GridOptionsBuilder.from_dataframe(df_inv)
+            gb_inv.configure_pagination(paginationAutoPageSize=True)
+            gb_inv.configure_default_column(filter=True, sortable=True)
+            grid_options_inv = gb_inv.build()
+            AgGrid(df_inv, gridOptions=grid_options_inv, height=400, fit_columns_on_grid_load=True)
         else:
             st.write("Nenhum item de inventário encontrado.")
     else:
@@ -293,7 +335,7 @@ def relatorios_page():
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
     
-    # Filtra chamados pelo período
+    # Filtra os chamados pelo período
     chamados = list_chamados()
     if not chamados:
         st.write("Nenhum chamado técnico encontrado.")
@@ -406,8 +448,6 @@ def relatorios_page():
             pdf.ln(5)
             pdf.cell(0, 10, f"Tempo médio global (horas úteis): {horas_global}h {minutos_global}m", ln=True)
         pdf_output = pdf.output(dest="S")
-        if isinstance(pdf_output, str):
-            pdf_output = pdf_output.encode("latin1")
         st.download_button("Baixar Relatório de Chamados em PDF", data=pdf_output, file_name="relatorio_chamados.pdf", mime="application/pdf")
     
     # Relatório do Inventário
@@ -420,7 +460,6 @@ def relatorios_page():
         gb_inv.configure_default_column(filter=True, sortable=True)
         grid_options_inv = gb_inv.build()
         AgGrid(df_inv, gridOptions=grid_options_inv, height=400, fit_columns_on_grid_load=True)
-        
         if st.button("Gerar Relatório do Inventário em PDF"):
             pdf_inv = FPDF()
             pdf_inv.add_page()
@@ -438,19 +477,40 @@ def relatorios_page():
     else:
         st.write("Nenhum item de inventário encontrado.")
 
+def exportar_dados_page():
+    st.subheader("Exportar Dados")
+    st.markdown("### Exportar Chamados em CSV")
+    chamados = list_chamados()
+    if chamados:
+        df_chamados = pd.DataFrame(chamados)
+        csv_chamados = df_chamados.to_csv(index=False).encode("utf-8")
+        st.download_button("Baixar Chamados CSV", data=csv_chamados, file_name="chamados.csv", mime="text/csv")
+    else:
+        st.write("Nenhum chamado para exportar.")
+    
+    st.markdown("### Exportar Inventário em CSV")
+    inventario_data = get_machines_from_inventory()
+    if inventario_data:
+        df_inv = pd.DataFrame(inventario_data)
+        csv_inv = df_inv.to_csv(index=False).encode("utf-8")
+        st.download_button("Baixar Inventário CSV", data=csv_inv, file_name="inventario.csv", mime="text/csv")
+    else:
+        st.write("Nenhum item de inventário para exportar.")
+
 def sair_page():
     logout()
 
 # Mapeamento das páginas
 pages = {
     "Login": login_page,
-    "Home": home_page,
+    "Dashboard": dashboard_page,
     "Abrir Chamado": abrir_chamado_page,
     "Chamados Técnicos": chamados_tecnicos_page,
     "Inventário": inventario_page,
     "Estoque": estoque_page,
     "Administração": administracao_page,
     "Relatórios": relatorios_page,
+    "Exportar Dados": exportar_dados_page,
     "Sair": sair_page,
 }
 
