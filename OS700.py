@@ -487,8 +487,8 @@ def chat_page():
             # Não é necessário forçar rerun; o Streamlit já atualiza ao modificar a session_state
 
 def sair_page():
-    st.session_state.logged_in = False
-    st.session_state.username = ""
+    st.session_state["logged_in"] = False
+    st.session_state["username"] = ""
     st.success("Você saiu.")
 
 # Mapeamento das páginas
