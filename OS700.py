@@ -9,15 +9,18 @@ from fpdf import FPDF
 from st_aggrid import AgGrid, GridOptionsBuilder
 from io import BytesIO
 
+import pytz
+FORTALEZA_TZ = pytz.timezone("America/Fortaleza")  # Timezone de Fortaleza, CE
+
 # Importação dos módulos internos
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
-    add_chamado,
+    add_chamado as add_chamado_base,
     get_chamado_by_protocolo,
     list_chamados,
     list_chamados_em_aberto,
-    finalizar_chamado,
     buscar_no_inventario_por_patrimonio,
+    finalizar_chamado as finalizar_chamado_base,
     calculate_working_hours
 )
 from inventario import show_inventory_list, cadastro_maquina, get_machines_from_inventory
@@ -43,6 +46,22 @@ else:
     st.warning("Logotipo não encontrado.")
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
+
+# --- Ajuste das Funções de Chamado para Horário Local ---
+
+def add_chamado(username, ubs, setor, tipo_defeito, problema, patrimonio=None):
+    """
+    Envolve a função add_chamado_base, mas define hora_abertura com fuso de Fortaleza.
+    """
+    hora_local = datetime.now(FORTALEZA_TZ).strftime('%d/%m/%Y %H:%M:%S')
+    return add_chamado_base(username, ubs, setor, tipo_defeito, problema, hora_abertura_custom=hora_local, patrimonio=patrimonio)
+
+def finalizar_chamado(chamado_id, solucao, pecas_usadas=None):
+    """
+    Envolve a função finalizar_chamado_base, mas define hora_fechamento com fuso de Fortaleza.
+    """
+    hora_local = datetime.now(FORTALEZA_TZ).strftime('%d/%m/%Y %H:%M:%S')
+    return finalizar_chamado_base(chamado_id, solucao, pecas_usadas=pecas_usadas, hora_fechamento_custom=hora_local)
 
 # --- Função Auxiliar para Exibir Chamado ---
 def exibir_chamado(chamado):
@@ -130,6 +149,10 @@ def login_page():
 
 def dashboard_page():
     st.subheader("Dashboard - Administrativo")
+    # Exibe horário local de Fortaleza
+    agora_fortaleza = datetime.now(FORTALEZA_TZ)
+    st.markdown(f"**Horário atual (Fortaleza):** {agora_fortaleza.strftime('%d/%m/%Y %H:%M:%S')}")
+
     chamados = list_chamados()
     total_chamados = len(chamados) if chamados else 0
     abertos = len(list_chamados_em_aberto()) if chamados else 0
@@ -137,15 +160,15 @@ def dashboard_page():
     col1.metric("Total de Chamados", total_chamados)
     col2.metric("Chamados Abertos", abertos)
     
-    # Notificação: chamados abertos com mais de 48h úteis
+    # Notificações: chamados abertos com mais de 48h úteis
     atrasados = []
     if chamados:
-        agora = datetime.now()
         for c in chamados:
             if c.get("hora_fechamento") is None:
                 try:
                     abertura = datetime.strptime(c["hora_abertura"], '%d/%m/%Y %H:%M:%S')
-                    tempo_util = calculate_working_hours(abertura, agora)
+                    agora_local = datetime.now(FORTALEZA_TZ)
+                    tempo_util = calculate_working_hours(abertura, agora_local)
                     if tempo_util > timedelta(hours=48):
                         atrasados.append(c)
                 except Exception:
@@ -356,15 +379,20 @@ def relatorios_page():
     if start_date > end_date:
         st.error("Data Início não pode ser maior que Data Fim")
         return
-    start_datetime = datetime.combine(start_date, datetime.min.time())
-    end_datetime = datetime.combine(end_date, datetime.max.time())
-    
+
+    # Exibe horário local de Fortaleza no relatório
+    agora_fortaleza = datetime.now(FORTALEZA_TZ)
+    st.markdown(f"**Horário local (Fortaleza):** {agora_fortaleza.strftime('%d/%m/%Y %H:%M:%S')}")
+
     chamados = list_chamados()
     if not chamados:
         st.write("Nenhum chamado técnico encontrado.")
         return
+    
     df = pd.DataFrame(chamados)
     df["hora_abertura_dt"] = pd.to_datetime(df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
     df_period = df[(df["hora_abertura_dt"] >= start_datetime) & (df["hora_abertura_dt"] <= end_datetime)]
     if filtro_ubs:
         df_period = df_period[df_period["ubs"].isin(filtro_ubs)]
@@ -377,6 +405,63 @@ def relatorios_page():
     AgGrid(df_period, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
     
     df_period["mes"] = df_period["hora_abertura_dt"].dt.to_period("M").astype(str)
+
+    # Métricas implantadas
+
+    # 1) Volume de Chamados (Abertos vs Fechados)
+    chamados_abertos = df_period[df_period["hora_fechamento"].isnull()].shape[0]
+    chamados_fechados = df_period[df_period["hora_fechamento"].notnull()].shape[0]
+    st.markdown(f"**Chamados Abertos (período):** {chamados_abertos}")
+    st.markdown(f"**Chamados Fechados (período):** {chamados_fechados}")
+
+    # 2) Tempo Médio de Resolução (TMR)
+    def tempo_resolucao(row):
+        if pd.notnull(row["hora_fechamento"]):
+            try:
+                ab = datetime.strptime(row["hora_abertura"], '%d/%m/%Y %H:%M:%S')
+                fe = datetime.strptime(row["hora_fechamento"], '%d/%m/%Y %H:%M:%S')
+                delta = calculate_working_hours(ab, fe)
+                return delta.total_seconds()
+            except:
+                return None
+        else:
+            return None
+    df_period["tempo_resolucao_seg"] = df_period.apply(tempo_resolucao, axis=1)
+    df_resolvidos = df_period.dropna(subset=["tempo_resolucao_seg"])
+    if not df_resolvidos.empty:
+        media_seg = df_resolvidos["tempo_resolucao_seg"].mean()
+        horas = int(media_seg // 3600)
+        minutos = int((media_seg % 3600) // 60)
+        st.markdown(f"**Tempo Médio de Resolução (horas úteis):** {horas}h {minutos}m")
+    else:
+        st.write("Nenhum chamado finalizado no período para calcular tempo médio de resolução.")
+
+    # 3) Chamados por Tipo de Defeito
+    if "tipo_defeito" in df_period.columns:
+        chamados_tipo = df_period.groupby("tipo_defeito").size().reset_index(name="qtd")
+        st.markdown("#### Chamados por Tipo de Defeito")
+        st.dataframe(chamados_tipo)
+        fig_tipo, ax_tipo = plt.subplots(figsize=(8,4))
+        ax_tipo.bar(chamados_tipo["tipo_defeito"], chamados_tipo["qtd"], color='purple')
+        ax_tipo.set_xlabel("Tipo de Defeito")
+        ax_tipo.set_ylabel("Quantidade de Chamados")
+        ax_tipo.set_title("Chamados por Tipo de Defeito")
+        plt.xticks(rotation=45, ha="right")
+        st.pyplot(fig_tipo)
+
+    # 4) Chamados por UBS e Setor
+    chamados_ubs_setor = df_period.groupby(["ubs", "setor"]).size().reset_index(name="qtd_chamados")
+    st.markdown("#### Chamados por UBS e Setor")
+    st.dataframe(chamados_ubs_setor)
+
+    # 5) Distribuição de Chamados por Dia da Semana
+    if not df_period.empty:
+        df_period["dia_semana"] = df_period["hora_abertura_dt"].dt.day_name()
+        chamados_por_dia = df_period.groupby("dia_semana").size().reset_index(name="qtd")
+        st.markdown("#### Chamados por Dia da Semana")
+        st.dataframe(chamados_por_dia)
+
+    # Estatísticas gerais no período
     chamados_ubs_mes = df_period.groupby(["ubs", "mes"]).size().reset_index(name="qtd_chamados")
     st.markdown("#### Chamados por UBS por Mês")
     st.dataframe(chamados_ubs_mes)
@@ -390,57 +475,8 @@ def relatorios_page():
     ax1.legend()
     plt.xticks(rotation=45)
     st.pyplot(fig1)
-    
-    chamados_setor = df_period.groupby("setor").size().reset_index(name="qtd_chamados")
-    st.markdown("#### Chamados por Setor")
-    st.dataframe(chamados_setor)
-    fig2, ax2 = plt.subplots(figsize=(8,4))
-    ax2.bar(chamados_setor["setor"], chamados_setor["qtd_chamados"], color='orange')
-    ax2.set_xlabel("Setor")
-    ax2.set_ylabel("Quantidade de Chamados")
-    ax2.setTitle("Chamados por Setor")
-    plt.xticks(rotation=45, ha="right")
-    st.pyplot(fig2)
-    
-    def calc_tempo(row):
-        if pd.notnull(row["hora_fechamento"]):
-            try:
-                abertura = datetime.strptime(row["hora_abertura"], '%d/%m/%Y %H:%M:%S')
-                fechamento = datetime.strptime(row["hora_fechamento"], '%d/%m/%Y %H:%M:%S')
-                tempo_util = calculate_working_hours(abertura, fechamento)
-                return tempo_util.total_seconds()
-            except Exception:
-                return None
-        else:
-            return None
-    df_period["tempo_util_seg"] = df_period.apply(calc_tempo, axis=1)
-    df_valid = df_period.dropna(subset=["tempo_util_seg"])
-    if not df_valid.empty:
-        tempo_medio_ubs = df_valid.groupby("ubs")["tempo_util_seg"].mean().reset_index()
-        tempo_medio_ubs["Tempo Médio"] = tempo_medio_ubs["tempo_util_seg"].apply(
-            lambda x: f"{int(x//3600)}h {int((x%3600)//60)}m"
-        )
-        st.markdown("#### Tempo Médio de Atendimento por UBS (horas úteis)")
-        st.dataframe(tempo_medio_ubs[["ubs", "Tempo Médio"]])
-        fig3, ax3 = plt.subplots(figsize=(8,4))
-        ax3.bar(tempo_medio_ubs["ubs"], tempo_medio_ubs["tempo_util_seg"], color='green')
-        ax3.set_xlabel("UBS")
-        ax3.set_ylabel("Tempo Médio (segundos)")
-        ax3.setTitle("Tempo Médio de Atendimento por UBS")
-        plt.xticks(rotation=45, ha="right")
-        st.pyplot(fig3)
-        
-        media_global = df_valid["tempo_util_seg"].mean()
-        horas_global = int(media_global // 3600)
-        minutos_global = int((media_global % 3600) // 60)
-        st.markdown(f"**Tempo médio global de atendimento (horas úteis):** {horas_global}h {minutos_global}m")
-    else:
-        st.write("Nenhum chamado finalizado no período para calcular tempo médio.")
-    
-    chamados_ubs_detalhado = df_period.groupby(["ubs", "mes"]).size().reset_index(name="qtd_chamados")
-    st.markdown("#### Chamados por UBS por Mês (detalhado)")
-    st.dataframe(chamados_ubs_detalhado)
-    
+
+    # Exportação em PDF
     if st.button("Gerar Relatório de Chamados em PDF"):
         pdf = FPDF()
         pdf.add_page()
@@ -453,19 +489,21 @@ def relatorios_page():
             pdf.cell(0, 10, f"UBS: {', '.join(filtro_ubs)}", ln=True)
         pdf.ln(5)
         pdf.cell(0, 10, "Chamados por UBS por Mês:", ln=True)
-        for idx, row in chamados_ubs_detalhado.iterrows():
+        for idx, row in chamados_ubs_mes.iterrows():
             pdf.cell(0, 8, f"UBS: {row['ubs']} | Mês: {row['mes']} | Qtd: {row['qtd_chamados']}", ln=True)
         pdf.ln(5)
         pdf.cell(0, 10, "Chamados por Setor:", ln=True)
-        for idx, row in chamados_setor.iterrows():
-            pdf.cell(0, 8, f"Setor: {row['setor']} | Qtd: {row['qtd_chamados']}", ln=True)
+        for idx, row in chamados_ubs_setor.iterrows():
+            pdf.cell(0, 8, f"UBS: {row['ubs']} | Setor: {row['setor']} | Qtd: {row['qtd_chamados']}", ln=True)
         pdf.ln(5)
-        if not df_valid.empty:
-            pdf.cell(0, 10, "Tempo Médio de Atendimento por UBS (horas úteis):", ln=True)
-            for idx, row in tempo_medio_ubs.iterrows():
-                pdf.cell(0, 8, f"UBS: {row['ubs']} | Tempo Médio: {row['Tempo Médio']}", ln=True)
+        if "tipo_defeito" in df_period.columns:
+            pdf.cell(0, 10, "Chamados por Tipo de Defeito:", ln=True)
+            for idx, row in chamados_tipo.iterrows():
+                pdf.cell(0, 8, f"{row['tipo_defeito']}: {row['qtd']}", ln=True)
             pdf.ln(5)
-            pdf.cell(0, 10, f"Tempo médio global (horas úteis): {horas_global}h {minutos_global}m", ln=True)
+        if not df_resolvidos.empty:
+            pdf.cell(0, 10, "Tempo Médio de Resolução (horas úteis):", ln=True)
+            pdf.cell(0, 8, f"{horas}h {minutos}m", ln=True)
         pdf_output = pdf.output(dest="S")
         st.download_button("Baixar Relatório de Chamados em PDF", data=pdf_output, file_name="relatorio_chamados.pdf", mime="application/pdf")
 
