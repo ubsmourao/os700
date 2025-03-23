@@ -406,6 +406,8 @@ def relatorios_page():
             pdf.ln(5)
             pdf.cell(0, 10, f"Tempo médio global (horas úteis): {horas_global}h {minutos_global}m", ln=True)
         pdf_output = pdf.output(dest="S")
+        if isinstance(pdf_output, str):
+            pdf_output = pdf_output.encode("latin1")
         st.download_button("Baixar Relatório de Chamados em PDF", data=pdf_output, file_name="relatorio_chamados.pdf", mime="application/pdf")
     
     # Relatório do Inventário
