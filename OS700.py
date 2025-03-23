@@ -7,8 +7,9 @@ from datetime import datetime, timedelta
 from streamlit_option_menu import option_menu
 from fpdf import FPDF
 from st_aggrid import AgGrid, GridOptionsBuilder
+from streamlit_chat import message  # Componente para chat
 
-# Importação dos módulos internos (certifique-se que esses módulos estão implementados)
+# Importação dos módulos internos – certifique-se de que esses módulos estão implementados
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
     add_chamado,
@@ -55,12 +56,14 @@ if st.session_state.logged_in:
             "Administração",
             "Relatórios",
             "Exportar Dados",
+            "Chat",
             "Sair"
         ]
     else:
         menu_options = [
             "Abrir Chamado",
             "Buscar Chamado",
+            "Chat",
             "Sair"
         ]
 else:
@@ -69,14 +72,20 @@ else:
 selected = option_menu(
     menu_title=None,
     options=menu_options,
-    icons=["speedometer", "chat-left-text", "card-list", "clipboard-data", "box-seam", "gear", "bar-chart-line", "download", "box-arrow-right"],
+    icons=["speedometer", "chat-left-text", "card-list", "clipboard-data", "box-seam", "gear", "bar-chart-line", "download", "chat-dots", "box-arrow-right"],
     menu_icon="cast",
     default_index=0,
     orientation="horizontal",
     styles={
         "container": {"padding": "5!important", "background-color": "#F5F5F5"},
         "icon": {"color": "black", "font-size": "18px"},
-        "nav-link": {"font-size": "16px", "text-align": "center", "margin": "0px", "color": "black", "padding": "10px"},
+        "nav-link": {
+            "font-size": "16px",
+            "text-align": "center",
+            "margin": "0px",
+            "color": "black",
+            "padding": "10px"
+        },
         "nav-link-selected": {"background-color": "#0275d8", "color": "white"}
     }
 )
@@ -117,7 +126,7 @@ def dashboard_page():
                     tempo_util = calculate_working_hours(abertura, agora)
                     if tempo_util > timedelta(hours=48):
                         atrasados.append(c)
-                except Exception:
+                except:
                     pass
     if atrasados:
         st.warning(f"Atenção: {len(atrasados)} chamados abertos com mais de 48h úteis!")
@@ -125,9 +134,7 @@ def dashboard_page():
     # Gráfico de tendência
     if chamados:
         df = pd.DataFrame(chamados)
-        df["hora_abertura_dt"] = pd.to_datetime(
-            df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce'
-        )
+        df["hora_abertura_dt"] = pd.to_datetime(df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
         df["mes"] = df["hora_abertura_dt"].dt.to_period("M").astype(str)
         tendencia = df.groupby("mes").size().reset_index(name="qtd")
         fig, ax = plt.subplots(figsize=(8,4))
@@ -157,7 +164,7 @@ def abrir_chamado_page():
             setor = machine_info["setor"]
             machine_type = machine_info["tipo"]
         else:
-            st.error("Patrimônio não encontrado. Cadastre a máquina antes de abrir o chamado.")
+            st.error("Patrimônio não encontrado. Cadastre a máquina antes.")
             st.stop()
     else:
         ubs_selecionada = st.selectbox("UBS", get_ubs_list())
@@ -176,9 +183,7 @@ def abrir_chamado_page():
             "Troca de toner", "Papel enroscado", "Erro de conexão com a impressora"
         ]
     else:
-        defect_options = [
-            "Solicitação de suporte geral", "Outros tipos de defeito"
-        ]
+        defect_options = ["Solicitação de suporte geral", "Outros tipos de defeito"]
     tipo_defeito = st.selectbox("Tipo de Defeito/Solicitação", defect_options)
     problema = st.text_area("Descreva o problema ou solicitação")
     if st.button("Abrir Chamado"):
@@ -193,10 +198,6 @@ def abrir_chamado_page():
         )
         if protocolo:
             st.success(f"Chamado aberto! Protocolo: {protocolo}")
-            # Exemplo: enviar notificação via WhatsApp (implemente sua função conforme necessário)
-            # enviar_mensagem_whatsapp(f"Novo chamado aberto! Protocolo: {protocolo}", "+5511999999999")
-            # Se agendamento foi definido, sincronizar com calendário (placeholder)
-            # sincronizar_calendario({"id": protocolo}, agendamento)
         else:
             st.error("Erro ao abrir chamado.")
 
@@ -210,8 +211,9 @@ def buscar_chamado_page():
                 st.write("Chamado encontrado:")
                 st.json(chamado)
                 if st.button("Visualizar Histórico"):
-                    # Exibe histórico do chamado (placeholder)
-                    visualizar_historico(chamado.get("id"))
+                    # Função para visualizar histórico (exemplo dummy)
+                    st.write("Histórico do chamado:")
+                    st.json({"01/01/2023": "Chamado aberto", "02/01/2023": "Atualização", "03/01/2023": "Chamado finalizado"})
             else:
                 st.error("Chamado não encontrado.")
         else:
@@ -231,7 +233,7 @@ def chamados_tecnicos_page():
                 fechamento = datetime.strptime(row["hora_fechamento"], '%d/%m/%Y %H:%M:%S')
                 tempo_util = calculate_working_hours(abertura, fechamento)
                 return str(tempo_util)
-            except Exception as e:
+            except Exception:
                 return "Erro"
         else:
             return "Em aberto"
@@ -356,7 +358,6 @@ def relatorios_page():
     grid_options = gb.build()
     AgGrid(df_period, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
     
-    # Estatística 1: Chamados por UBS por Mês
     df_period["mes"] = df_period["hora_abertura_dt"].dt.to_period("M").astype(str)
     chamados_ubs_mes = df_period.groupby(["ubs", "mes"]).size().reset_index(name="qtd_chamados")
     st.markdown("#### Chamados por UBS por Mês")
@@ -372,7 +373,6 @@ def relatorios_page():
     plt.xticks(rotation=45)
     st.pyplot(fig1)
     
-    # Estatística 2: Chamados por Setor
     chamados_setor = df_period.groupby("setor").size().reset_index(name="qtd_chamados")
     st.markdown("#### Chamados por Setor")
     st.dataframe(chamados_setor)
@@ -384,7 +384,6 @@ def relatorios_page():
     plt.xticks(rotation=45, ha="right")
     st.pyplot(fig2)
     
-    # Estatística 3: Tempo médio de atendimento por UBS (horas úteis)
     def calc_tempo(row):
         if pd.notnull(row["hora_fechamento"]):
             try:
@@ -392,7 +391,7 @@ def relatorios_page():
                 fechamento = datetime.strptime(row["hora_fechamento"], '%d/%m/%Y %H:%M:%S')
                 tempo_util = calculate_working_hours(abertura, fechamento)
                 return tempo_util.total_seconds()
-            except Exception as e:
+            except Exception:
                 return None
         else:
             return None
@@ -420,12 +419,10 @@ def relatorios_page():
     else:
         st.write("Nenhum chamado finalizado no período para calcular tempo médio.")
     
-    # Estatística 4: Detalhamento por UBS e mês
     chamados_ubs_detalhado = df_period.groupby(["ubs", "mes"]).size().reset_index(name="qtd_chamados")
     st.markdown("#### Chamados por UBS por Mês (detalhado)")
     st.dataframe(chamados_ubs_detalhado)
     
-    # Geração de PDF para Relatório de Chamados
     if st.button("Gerar Relatório de Chamados em PDF"):
         pdf = FPDF()
         pdf.add_page()
@@ -453,34 +450,6 @@ def relatorios_page():
             pdf.cell(0, 10, f"Tempo médio global (horas úteis): {horas_global}h {minutos_global}m", ln=True)
         pdf_output = pdf.output(dest="S")
         st.download_button("Baixar Relatório de Chamados em PDF", data=pdf_output, file_name="relatorio_chamados.pdf", mime="application/pdf")
-    
-    # Relatório do Inventário
-    st.markdown("### Relatório do Inventário")
-    inventario_data = get_machines_from_inventory()
-    if inventario_data:
-        df_inv = pd.DataFrame(inventario_data)
-        gb_inv = GridOptionsBuilder.from_dataframe(df_inv)
-        gb_inv.configure_default_column(filter=True, sortable=True)
-        gb_inv.configure_pagination(paginationAutoPageSize=True)
-        gb_inv.configure_grid_options(domLayout='normal')
-        grid_options_inv = gb_inv.build()
-        AgGrid(df_inv, gridOptions=grid_options_inv, height=400, fit_columns_on_grid_load=True)
-        if st.button("Gerar Relatório do Inventário em PDF"):
-            pdf_inv = FPDF()
-            pdf_inv.add_page()
-            pdf_inv.set_font("Arial", "B", 16)
-            pdf_inv.cell(0, 10, "Relatório do Inventário - Gestão de Parque de Informática", ln=True, align="C")
-            pdf_inv.ln(10)
-            pdf_inv.set_font("Arial", "", 12)
-            for idx, row in df_inv.iterrows():
-                linha = (f"Patrimônio: {row.get('numero_patrimonio')} | Tipo: {row.get('tipo')} | "
-                         f"Marca: {row.get('marca')} | Modelo: {row.get('modelo')} | "
-                         f"UBS: {row.get('localizacao')} | Setor: {row.get('setor')}")
-                pdf_inv.multi_cell(0, 8, linha)
-            pdf_inv_output = pdf_inv.output(dest="S")
-            st.download_button("Baixar Relatório do Inventário em PDF", data=pdf_inv_output, file_name="relatorio_inventario.pdf", mime="application/pdf")
-    else:
-        st.write("Nenhum item de inventário encontrado.")
 
 def exportar_dados_page():
     st.subheader("Exportar Dados")
@@ -502,6 +471,25 @@ def exportar_dados_page():
     else:
         st.write("Nenhum item de inventário para exportar.")
 
+def chat_page():
+    st.subheader("Chat com Suporte")
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    # Exibe o histórico do chat usando streamlit_chat
+    for chat in st.session_state.chat_history:
+        if chat["role"] == "user":
+            message(chat["message"], is_user=True)
+        else:
+            message(chat["message"], is_user=False)
+    user_input = st.text_input("Digite sua mensagem:", key="chat_input")
+    if st.button("Enviar"):
+        if user_input:
+            st.session_state.chat_history.append({"role": "user", "message": user_input})
+            # Aqui você pode implementar uma resposta automática ou encaminhar para um técnico
+            resposta = "Mensagem recebida. Em breve um técnico responderá."
+            st.session_state.chat_history.append({"role": "assistant", "message": resposta})
+            st.experimental_rerun()
+
 def sair_page():
     st.session_state.logged_in = False
     st.session_state.username = ""
@@ -519,6 +507,7 @@ pages = {
     "Administração": administracao_page,
     "Relatórios": relatorios_page,
     "Exportar Dados": exportar_dados_page,
+    "Chat": chat_page,
     "Sair": sair_page,
 }
 
