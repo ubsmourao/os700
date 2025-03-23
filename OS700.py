@@ -8,7 +8,7 @@ from streamlit_option_menu import option_menu
 from fpdf import FPDF
 from st_aggrid import AgGrid, GridOptionsBuilder
 
-# Importação dos módulos e funções
+# Importação dos módulos internos
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
     add_chamado,
@@ -43,7 +43,7 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# Definição do menu
+# Definição do menu conforme o perfil do usuário
 if st.session_state.logged_in:
     if is_admin(st.session_state.username):
         menu_options = [
@@ -58,7 +58,6 @@ if st.session_state.logged_in:
             "Sair"
         ]
     else:
-        # Usuários comuns: somente abrir chamado e buscar chamado
         menu_options = [
             "Abrir Chamado",
             "Buscar Chamado",
@@ -129,13 +128,11 @@ def dashboard_page():
 def abrir_chamado_page():
     st.subheader("Abrir Chamado Técnico")
     patrimonio = st.text_input("Número de Patrimônio (opcional)")
-    # Campo opcional para agendamento de manutenção
     data_agendada = st.date_input("Data Agendada para Manutenção (opcional)")
     machine_info = None
     machine_type = None
     ubs_selecionada = None
     setor = None
-
     if patrimonio:
         machine_info = buscar_no_inventario_por_patrimonio(patrimonio)
         if machine_info:
@@ -151,7 +148,6 @@ def abrir_chamado_page():
         ubs_selecionada = st.selectbox("UBS", get_ubs_list())
         setor = st.selectbox("Setor", get_setores_list())
         machine_type = st.selectbox("Tipo de Máquina", ["Computador", "Impressora", "Outro"])
-
     if machine_type == "Computador":
         defect_options = [
             "Computador não liga", "Computador lento", "Tela azul", "Sistema travando",
@@ -168,10 +164,8 @@ def abrir_chamado_page():
         defect_options = [
             "Solicitação de suporte geral", "Outros tipos de defeito"
         ]
-    
     tipo_defeito = st.selectbox("Tipo de Defeito/Solicitação", defect_options)
     problema = st.text_area("Descreva o problema ou solicitação")
-    
     if st.button("Abrir Chamado"):
         agendamento = data_agendada.strftime('%d/%m/%Y') if data_agendada else None
         protocolo = add_chamado(
@@ -496,6 +490,7 @@ pages = {
     "Administração": administracao_page,
     "Relatórios": relatorios_page,
     "Exportar Dados": exportar_dados_page,
+    "Buscar Chamado": buscar_chamado_page,
     "Sair": sair_page,
 }
 
