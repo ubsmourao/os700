@@ -7,9 +7,12 @@ from datetime import datetime, timedelta
 from streamlit_option_menu import option_menu
 from fpdf import FPDF
 from st_aggrid import AgGrid, GridOptionsBuilder
-from streamlit_chat import message  # Componente para chat
+from io import BytesIO
 
-# Importação dos módulos internos – certifique-se de que esses módulos estão implementados
+# Importa a função "message" de streamlit_chat com um alias para evitar conflitos
+from streamlit_chat import message as st_chat_message
+
+# Importação dos módulos internos – certifique-se que esses módulos estão implementados
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
     add_chamado,
@@ -79,13 +82,7 @@ selected = option_menu(
     styles={
         "container": {"padding": "5!important", "background-color": "#F5F5F5"},
         "icon": {"color": "black", "font-size": "18px"},
-        "nav-link": {
-            "font-size": "16px",
-            "text-align": "center",
-            "margin": "0px",
-            "color": "black",
-            "padding": "10px"
-        },
+        "nav-link": {"font-size": "16px", "text-align": "center", "margin": "0px", "color": "black", "padding": "10px"},
         "nav-link-selected": {"background-color": "#0275d8", "color": "white"}
     }
 )
@@ -115,7 +112,7 @@ def dashboard_page():
     col1.metric("Total de Chamados", total_chamados)
     col2.metric("Chamados Abertos", abertos)
     
-    # Notificações: chamados abertos com mais de 48h úteis
+    # Notificação: chamados abertos com mais de 48h úteis
     atrasados = []
     if chamados:
         agora = datetime.now()
@@ -126,7 +123,7 @@ def dashboard_page():
                     tempo_util = calculate_working_hours(abertura, agora)
                     if tempo_util > timedelta(hours=48):
                         atrasados.append(c)
-                except:
+                except Exception:
                     pass
     if atrasados:
         st.warning(f"Atenção: {len(atrasados)} chamados abertos com mais de 48h úteis!")
@@ -211,7 +208,6 @@ def buscar_chamado_page():
                 st.write("Chamado encontrado:")
                 st.json(chamado)
                 if st.button("Visualizar Histórico"):
-                    # Função para visualizar histórico (exemplo dummy)
                     st.write("Histórico do chamado:")
                     st.json({"01/01/2023": "Chamado aberto", "02/01/2023": "Atualização", "03/01/2023": "Chamado finalizado"})
             else:
@@ -478,17 +474,17 @@ def chat_page():
     # Exibe o histórico do chat usando streamlit_chat
     for chat in st.session_state.chat_history:
         if chat["role"] == "user":
-            message(chat["message"], is_user=True)
+            st_chat_message(chat["message"], is_user=True)
         else:
-            message(chat["message"], is_user=False)
+            st_chat_message(chat["message"], is_user=False)
     user_input = st.text_input("Digite sua mensagem:", key="chat_input")
     if st.button("Enviar"):
         if user_input:
             st.session_state.chat_history.append({"role": "user", "message": user_input})
-            # Aqui você pode implementar uma resposta automática ou encaminhar para um técnico
+            # Resposta dummy – aqui você pode integrar um bot ou encaminhar para um técnico
             resposta = "Mensagem recebida. Em breve um técnico responderá."
             st.session_state.chat_history.append({"role": "assistant", "message": resposta})
-            
+            # Não é necessário forçar rerun; o Streamlit já atualiza ao modificar a session_state
 
 def sair_page():
     st.session_state.logged_in = False
