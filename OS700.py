@@ -9,7 +9,10 @@ from fpdf import FPDF
 from st_aggrid import AgGrid, GridOptionsBuilder
 from io import BytesIO
 
-# Importação dos módulos internos – certifique-se de que esses módulos estão implementados
+# Importa a função message do streamlit_chat com alias para evitar conflitos
+from streamlit_chat import message as st_chat_message
+
+# Importação dos módulos internos – certifique-se de que estes módulos estão implementados
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
     add_chamado,
@@ -310,7 +313,7 @@ def estoque_page():
 def administracao_page():
     st.subheader("Administração")
     admin_option = st.selectbox("Opções de Administração", [
-        "Cadastro de Usuário", "Gerenciar UBSs", "Gerenciar Setores", "Lista de Usuários"
+        "Cadastro de Usuário", "Gerenciar UBSs", "Gerenciar Setores", "Lista de Usuários", "Buscar Chamado"
     ])
     if admin_option == "Cadastro de Usuário":
         novo_user = st.text_input("Novo Usuário")
@@ -333,6 +336,8 @@ def administracao_page():
             st.table(usuarios)
         else:
             st.write("Nenhum usuário cadastrado.")
+    elif admin_option == "Buscar Chamado":
+        buscar_chamado_page()
 
 def relatorios_page():
     st.subheader("Relatórios Completos - Estatísticas")
@@ -482,7 +487,6 @@ def exportar_dados_page():
 
 def chat_page():
     st.subheader("Chat com Suporte")
-    # Inicializa o histórico se ainda não existir
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
     # Exibe o histórico do chat usando Markdown
@@ -495,7 +499,6 @@ def chat_page():
     if st.button("Enviar"):
         if user_input:
             st.session_state["chat_history"].append({"role": "user", "message": user_input})
-            # Resposta dummy – você pode integrar um bot ou encaminhar a mensagem para um técnico
             resposta = "Mensagem recebida. Em breve, um técnico responderá."
             st.session_state["chat_history"].append({"role": "suporte", "message": resposta})
 
