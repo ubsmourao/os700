@@ -7,6 +7,9 @@ from datetime import datetime, timedelta
 from streamlit_option_menu import option_menu
 from fpdf import FPDF
 
+# Importa a AgGrid para visualização interativa de DataFrames
+from st_aggrid import AgGrid, GridOptionsBuilder
+
 # Importação dos módulos e funções
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
@@ -41,7 +44,7 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# --- Menu Horizontal (ótimo para smartphones) ---
+# --- Menu Horizontal (para smartphones) ---
 if st.session_state.logged_in:
     if is_admin(st.session_state.username):
         menu_options = [
@@ -134,32 +137,19 @@ def abrir_chamado_page():
 
     if machine_type == "Computador":
         defect_options = [
-            "Computador não liga",
-            "Computador lento",
-            "Tela azul",
-            "Sistema travando",
-            "Erro de disco",
-            "Problema com atualização",
-            "Desligamento inesperado",
-            "Problemas de internet",
-            "Problema com Wi-Fi",
-            "Sem conexão de rede",
-            "Mouse não funciona",
-            "Teclado não funciona"
+            "Computador não liga", "Computador lento", "Tela azul", "Sistema travando",
+            "Erro de disco", "Problema com atualização", "Desligamento inesperado",
+            "Problemas de internet", "Problema com Wi-Fi", "Sem conexão de rede",
+            "Mouse não funciona", "Teclado não funciona"
         ]
     elif machine_type == "Impressora":
         defect_options = [
-            "Impressora não imprime",
-            "Impressão borrada",
-            "Toner vazio",
-            "Troca de toner",
-            "Papel enroscado",
-            "Erro de conexão com a impressora"
+            "Impressora não imprime", "Impressão borrada", "Toner vazio",
+            "Troca de toner", "Papel enroscado", "Erro de conexão com a impressora"
         ]
     else:
         defect_options = [
-            "Solicitação de suporte geral",
-            "Outros tipos de defeito"
+            "Solicitação de suporte geral", "Outros tipos de defeito"
         ]
     
     tipo_defeito = st.selectbox("Tipo de Defeito/Solicitação", defect_options)
@@ -198,7 +188,13 @@ def chamados_tecnicos_page():
         else:
             return "Em aberto"
     df["Tempo Util"] = df.apply(calcula_tempo, axis=1)
-    st.dataframe(df)
+    
+    # Utilizando AgGrid para exibir a tabela interativa
+    gb = GridOptionsBuilder.from_dataframe(df)
+    gb.configure_pagination(paginationAutoPageSize=True)
+    gb.configure_default_column(filter=True, sortable=True)
+    grid_options = gb.build()
+    AgGrid(df, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
     
     # Finalização integrada no painel de chamados técnicos
     df_aberto = df[df["hora_fechamento"].isnull()]
@@ -211,23 +207,18 @@ def chamados_tecnicos_page():
         st.write(f"Problema: {chamado['problema']}")
         if "impressora" in chamado.get("tipo_defeito", "").lower():
             solucao_options = [
-                "Limpeza e recalibração da impressora",
-                "Substituição de cartucho/toner",
-                "Verificação de conexão e drivers",
-                "Reinicialização da impressora"
+                "Limpeza e recalibração da impressora", "Substituição de cartucho/toner",
+                "Verificação de conexão e drivers", "Reinicialização da impressora"
             ]
         else:
             solucao_options = [
-                "Reinicialização do sistema",
-                "Atualização de drivers/software",
-                "Substituição de componente (ex.: HD, memória)",
-                "Verificação de vírus/malware"
+                "Reinicialização do sistema", "Atualização de drivers/software",
+                "Substituição de componente (ex.: HD, memória)", "Verificação de vírus/malware"
             ]
         solucao_selecionada = st.selectbox("Selecione a solução", solucao_options)
         solucao_complementar = st.text_area("Detalhes adicionais da solução (opcional)")
         solucao_final = solucao_selecionada + ((" - " + solucao_complementar) if solucao_complementar else "")
         
-        # Seleção de peças utilizadas a partir do estoque
         estoque_data = get_estoque()
         pieces_list = [item["nome"] for item in estoque_data] if estoque_data else []
         pecas_selecionadas = st.multiselect("Selecione as peças utilizadas (se houver)", pieces_list)
@@ -242,7 +233,17 @@ def inventario_page():
     st.subheader("Inventário")
     opcao = st.radio("Selecione uma opção:", ["Listar Inventário", "Cadastrar Máquina"])
     if opcao == "Listar Inventário":
-        show_inventory_list()
+        # Exibe inventário com AgGrid para melhor interatividade
+        inventario_data = get_machines_from_inventory()
+        if inventario_data:
+            df_inv = pd.DataFrame(inventario_data)
+            gb = GridOptionsBuilder.from_dataframe(df_inv)
+            gb.configure_pagination(paginationAutoPageSize=True)
+            gb.configure_default_column(filter=True, sortable=True)
+            grid_options = gb.build()
+            AgGrid(df_inv, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
+        else:
+            st.write("Nenhum item de inventário encontrado.")
     else:
         cadastro_maquina()
 
@@ -252,10 +253,7 @@ def estoque_page():
 def administracao_page():
     st.subheader("Administração")
     admin_option = st.selectbox("Opções de Administração", [
-        "Cadastro de Usuário",
-        "Gerenciar UBSs",
-        "Gerenciar Setores",
-        "Lista de Usuários"
+        "Cadastro de Usuário", "Gerenciar UBSs", "Gerenciar Setores", "Lista de Usuários"
     ])
     if admin_option == "Cadastro de Usuário":
         novo_user = st.text_input("Novo Usuário")
@@ -306,7 +304,11 @@ def relatorios_page():
     if filtro_ubs:
         df_period = df_period[df_period["ubs"].isin(filtro_ubs)]
     st.markdown("### Chamados Técnicos no Período")
-    st.dataframe(df_period)
+    gb = GridOptionsBuilder.from_dataframe(df_period)
+    gb.configure_pagination(paginationAutoPageSize=True)
+    gb.configure_default_column(filter=True, sortable=True)
+    grid_options = gb.build()
+    AgGrid(df_period, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
     
     # Estatística 1: Chamados por UBS por Mês
     df_period["mes"] = df_period["hora_abertura_dt"].dt.to_period("M").astype(str)
@@ -411,7 +413,12 @@ def relatorios_page():
     inventario_data = get_machines_from_inventory()
     if inventario_data:
         df_inv = pd.DataFrame(inventario_data)
-        st.dataframe(df_inv)
+        gb_inv = GridOptionsBuilder.from_dataframe(df_inv)
+        gb_inv.configure_pagination(paginationAutoPageSize=True)
+        gb_inv.configure_default_column(filter=True, sortable=True)
+        grid_options_inv = gb_inv.build()
+        AgGrid(df_inv, gridOptions=grid_options_inv, height=400, fit_columns_on_grid_load=True)
+        
         if st.button("Gerar Relatório do Inventário em PDF"):
             pdf_inv = FPDF()
             pdf_inv.add_page()
@@ -420,11 +427,9 @@ def relatorios_page():
             pdf_inv.ln(10)
             pdf_inv.set_font("Arial", "", 12)
             for idx, row in df_inv.iterrows():
-                linha = (
-                    f"Patrimônio: {row.get('numero_patrimonio')} | Tipo: {row.get('tipo')} | "
-                    f"Marca: {row.get('marca')} | Modelo: {row.get('modelo')} | "
-                    f"UBS: {row.get('localizacao')} | Setor: {row.get('setor')}"
-                )
+                linha = (f"Patrimônio: {row.get('numero_patrimonio')} | Tipo: {row.get('tipo')} | "
+                         f"Marca: {row.get('marca')} | Modelo: {row.get('modelo')} | "
+                         f"UBS: {row.get('localizacao')} | Setor: {row.get('setor')}")
                 pdf_inv.multi_cell(0, 8, linha)
             pdf_inv_output = pdf_inv.output(dest="S")
             st.download_button("Baixar Relatório do Inventário em PDF", data=pdf_inv_output, file_name="relatorio_inventario.pdf", mime="application/pdf")
