@@ -12,7 +12,7 @@ from io import BytesIO
 # Importa a função message do streamlit_chat com um alias para evitar conflitos
 from streamlit_chat import message as st_chat_message
 
-# Importação dos módulos internos – certifique-se de que esses módulos estão implementados
+# Importação dos módulos internos – certifique-se de que estes módulos estão implementados
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
     add_chamado,
@@ -47,51 +47,24 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# Definição do menu conforme o perfil do usuário
-if st.session_state["logged_in"]:
-    if is_admin(st.session_state["username"]):
-        menu_options = [
-            "Dashboard",
-            "Abrir Chamado",
-            "Chamados Técnicos",
-            "Inventário",
-            "Estoque",
-            "Administração",
-            "Relatórios",
-            "Exportar Dados",
-            "Chat",
-            "Sair"
-        ]
-    else:
-        menu_options = [
-            "Abrir Chamado",
-            "Buscar Chamado",
-            "Chat",
-            "Sair"
-        ]
-else:
-    menu_options = ["Login"]
-
-selected = option_menu(
-    menu_title=None,
-    options=menu_options,
-    icons=["speedometer", "chat-left-text", "card-list", "clipboard-data", "box-seam", "gear", "bar-chart-line", "download", "chat-dots", "box-arrow-right"],
-    menu_icon="cast",
-    default_index=0,
-    orientation="horizontal",
-    styles={
-        "container": {"padding": "5!important", "background-color": "#F5F5F5"},
-        "icon": {"color": "black", "font-size": "18px"},
-        "nav-link": {
-            "font-size": "16px",
-            "text-align": "center",
-            "margin": "0px",
-            "color": "black",
-            "padding": "10px"
-        },
-        "nav-link-selected": {"background-color": "#0275d8", "color": "white"}
-    }
-)
+# --- Função Auxiliar para Exibir Chamado ---
+def exibir_chamado(chamado):
+    st.markdown("### Detalhes do Chamado")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"**ID:** {chamado.get('id', 'N/A')}")
+        st.markdown(f"**Usuário:** {chamado.get('username', 'N/A')}")
+        st.markdown(f"**UBS:** {chamado.get('ubs', 'N/A')}")
+        st.markdown(f"**Setor:** {chamado.get('setor', 'N/A')}")
+        st.markdown(f"**Protocolo:** {chamado.get('protocolo', 'N/A')}")
+    with col2:
+        st.markdown(f"**Tipo de Defeito:** {chamado.get('tipo_defeito', 'N/A')}")
+        st.markdown(f"**Problema:** {chamado.get('problema', 'N/A')}")
+        st.markdown(f"**Hora de Abertura:** {chamado.get('hora_abertura', 'N/A')}")
+        st.markdown(f"**Hora de Fechamento:** {chamado.get('hora_fechamento', 'Em aberto')}")
+    if chamado.get("solucao"):
+        st.markdown("### Solução")
+        st.markdown(chamado["solucao"])
 
 # --- Funções das Páginas ---
 
@@ -210,26 +183,8 @@ def buscar_chamado_page():
         if protocolo:
             chamado = get_chamado_by_protocolo(protocolo)
             if chamado:
-                st.markdown("### Detalhes do Chamado")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(f"**Protocolo:** {chamado.get('protocolo', 'N/A')}")
-                    st.markdown(f"**Usuário:** {chamado.get('username', 'N/A')}")
-                    st.markdown(f"**UBS:** {chamado.get('ubs', 'N/A')}")
-                    st.markdown(f"**Setor:** {chamado.get('setor', 'N/A')}")
-                with col2:
-                    st.markdown(f"**Tipo de Defeito:** {chamado.get('tipo_defeito', 'N/A')}")
-                    st.markdown(f"**Problema:** {chamado.get('problema', 'N/A')}")
-                    st.markdown(f"**Hora de Abertura:** {chamado.get('hora_abertura', 'N/A')}")
-                    st.markdown(f"**Hora de Fechamento:** {chamado.get('hora_fechamento', 'Em aberto')}")
-                if chamado.get("solucao"):
-                    st.markdown("### Solução")
-                    st.markdown(chamado["solucao"])
-                if st.button("Visualizar Histórico"):
-                    st.markdown("### Histórico do Chamado")
-                    historico = chamado.get("historico", {"01/01/2023": "Chamado aberto", "02/01/2023": "Atualização", "03/01/2023": "Chamado finalizado"})
-                    for data, evento in historico.items():
-                        st.markdown(f"**{data}** - {evento}")
+                st.write("Chamado encontrado:")
+                exibir_chamado(chamado)
             else:
                 st.error("Chamado não encontrado.")
         else:
