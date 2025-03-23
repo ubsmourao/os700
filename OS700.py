@@ -9,10 +9,7 @@ from fpdf import FPDF
 from st_aggrid import AgGrid, GridOptionsBuilder
 from io import BytesIO
 
-# Importa a função message do streamlit_chat com alias para evitar conflitos
-from streamlit_chat import message as st_chat_message
-
-# Importação dos módulos internos – certifique-se de que estes módulos estão implementados
+# Importação dos módulos internos
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
     add_chamado,
@@ -27,6 +24,9 @@ from inventario import show_inventory_list, cadastro_maquina, get_machines_from_
 from ubs import get_ubs_list
 from setores import get_setores_list
 from estoque import manage_estoque, get_estoque
+
+# Importa o módulo de chat local
+from chat import chat_usuario_page, chat_admin_page
 
 # Configuração do logging
 logging.basicConfig(level=logging.INFO)
@@ -66,7 +66,7 @@ def exibir_chamado(chamado):
         st.markdown("### Solução")
         st.markdown(chamado["solucao"])
 
-# --- Definição do Menu ---
+# Definição do Menu
 if st.session_state["logged_in"]:
     if is_admin(st.session_state["username"]):
         menu_options = [
@@ -79,14 +79,14 @@ if st.session_state["logged_in"]:
             "Administração",
             "Relatórios",
             "Exportar Dados",
-            "Chat",
+            "Chat Admin",  # Chat para o administrador
             "Sair"
         ]
     else:
         menu_options = [
             "Abrir Chamado",
             "Buscar Chamado",
-            "Chat",
+            "Chat",  # Chat para o usuário comum
             "Sair"
         ]
 else:
@@ -95,14 +95,24 @@ else:
 selected = option_menu(
     menu_title=None,
     options=menu_options,
-    icons=["speedometer", "chat-left-text", "search", "card-list", "clipboard-data", "box-seam", "gear", "bar-chart-line", "download", "chat-dots", "box-arrow-right"],
+    icons=[
+        "speedometer", "chat-left-text", "search", "card-list",
+        "clipboard-data", "box-seam", "gear", "bar-chart-line",
+        "download", "chat-dots", "box-arrow-right"
+    ],
     menu_icon="cast",
     default_index=0,
     orientation="horizontal",
     styles={
         "container": {"padding": "5!important", "background-color": "#F5F5F5"},
         "icon": {"color": "black", "font-size": "18px"},
-        "nav-link": {"font-size": "16px", "text-align": "center", "margin": "0px", "color": "black", "padding": "10px"},
+        "nav-link": {
+            "font-size": "16px",
+            "text-align": "center",
+            "margin": "0px",
+            "color": "black",
+            "padding": "10px"
+        },
         "nav-link-selected": {"background-color": "#0275d8", "color": "white"}
     }
 )
@@ -118,7 +128,8 @@ def login_page():
             st.error("Preencha todos os campos.")
         elif authenticate(username, password):
             st.success(f"Bem-vindo, {username}!")
-            st.session_state.update({"logged_in": True, "username": username})
+            st.session_state["logged_in"] = True
+            st.session_state["username"] = username
         else:
             st.error("Usuário ou senha incorretos.")
 
@@ -131,7 +142,7 @@ def dashboard_page():
     col1.metric("Total de Chamados", total_chamados)
     col2.metric("Chamados Abertos", abertos)
     
-    # Notificações: chamados abertos com mais de 48h úteis
+    # Notificação: chamados abertos com mais de 48h úteis
     atrasados = []
     if chamados:
         agora = datetime.now()
@@ -313,7 +324,7 @@ def estoque_page():
 def administracao_page():
     st.subheader("Administração")
     admin_option = st.selectbox("Opções de Administração", [
-        "Cadastro de Usuário", "Gerenciar UBSs", "Gerenciar Setores", "Lista de Usuários", "Buscar Chamado"
+        "Cadastro de Usuário", "Gerenciar UBSs", "Gerenciar Setores", "Lista de Usuários"
     ])
     if admin_option == "Cadastro de Usuário":
         novo_user = st.text_input("Novo Usuário")
@@ -336,8 +347,6 @@ def administracao_page():
             st.table(usuarios)
         else:
             st.write("Nenhum usuário cadastrado.")
-    elif admin_option == "Buscar Chamado":
-        buscar_chamado_page()
 
 def relatorios_page():
     st.subheader("Relatórios Completos - Estatísticas")
@@ -485,25 +494,19 @@ def exportar_dados_page():
     else:
         st.write("Nenhum item de inventário para exportar.")
 
-def chat_page():
-    st.subheader("Chat com Suporte")
-    if "chat_history" not in st.session_state:
-        st.session_state["chat_history"] = []
-    # Exibe o histórico do chat usando Markdown
-    for chat in st.session_state["chat_history"]:
-        if chat["role"] == "user":
-            st.markdown(f"**Você:** {chat['message']}")
-        else:
-            st.markdown(f"**Suporte:** {chat['message']}")
-    user_input = st.text_input("Digite sua mensagem:", key="chat_input")
-    if st.button("Enviar"):
-        if user_input:
-            st.session_state["chat_history"].append({"role": "user", "message": user_input})
-            resposta = "Mensagem recebida. Em breve, um técnico responderá."
-            st.session_state["chat_history"].append({"role": "suporte", "message": resposta})
+def chat_admin_wrapper():
+    """Função wrapper para chamar chat_admin_page do módulo chat."""
+    from chat import chat_admin_page
+    chat_admin_page()
+
+def chat_usuario_wrapper():
+    """Função wrapper para chamar chat_usuario_page do módulo chat."""
+    from chat import chat_usuario_page
+    chat_usuario_page(st.session_state["username"])
 
 def sair_page():
-    st.session_state.update({"logged_in": False, "username": ""})
+    st.session_state["logged_in"] = False
+    st.session_state["username"] = ""
     st.success("Você saiu.")
 
 # Mapeamento das páginas
@@ -518,7 +521,8 @@ pages = {
     "Administração": administracao_page,
     "Relatórios": relatorios_page,
     "Exportar Dados": exportar_dados_page,
-    "Chat": chat_page,
+    "Chat": chat_usuario_wrapper,       # Chat para o usuário comum
+    "Chat Admin": chat_admin_wrapper,   # Chat para o administrador
     "Sair": sair_page,
 }
 
