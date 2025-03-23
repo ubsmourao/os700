@@ -25,9 +25,6 @@ from ubs import get_ubs_list
 from setores import get_setores_list
 from estoque import manage_estoque, get_estoque
 
-# Importa o módulo de chat local
-from chat import chat_usuario_page, chat_admin_page
-
 # Configuração do logging
 logging.basicConfig(level=logging.INFO)
 
@@ -79,14 +76,12 @@ if st.session_state["logged_in"]:
             "Administração",
             "Relatórios",
             "Exportar Dados",
-            "Chat Admin",  # Chat para o administrador
             "Sair"
         ]
     else:
         menu_options = [
             "Abrir Chamado",
             "Buscar Chamado",
-            "Chat",  # Chat para o usuário comum
             "Sair"
         ]
 else:
@@ -98,7 +93,7 @@ selected = option_menu(
     icons=[
         "speedometer", "chat-left-text", "search", "card-list",
         "clipboard-data", "box-seam", "gear", "bar-chart-line",
-        "download", "chat-dots", "box-arrow-right"
+        "download", "box-arrow-right"
     ],
     menu_icon="cast",
     default_index=0,
@@ -296,7 +291,7 @@ def chamados_tecnicos_page():
         if st.button("Finalizar Chamado"):
             if solucao_final:
                 solucao_completa = solucao_final + (f" | Comentários: {comentarios}" if comentarios else "")
-                finalizar_chamado(chamado_id, solucao_completa, pecas_usadas=pecas_selecionadas)
+                finalizar_chamado(chamado_id, solucao_completa, pecas_selecionadas)
             else:
                 st.error("Informe a solução para finalizar o chamado.")
 
@@ -403,7 +398,7 @@ def relatorios_page():
     ax2.bar(chamados_setor["setor"], chamados_setor["qtd_chamados"], color='orange')
     ax2.set_xlabel("Setor")
     ax2.set_ylabel("Quantidade de Chamados")
-    ax2.set_title("Chamados por Setor")
+    ax2.setTitle("Chamados por Setor")
     plt.xticks(rotation=45, ha="right")
     st.pyplot(fig2)
     
@@ -431,7 +426,7 @@ def relatorios_page():
         ax3.bar(tempo_medio_ubs["ubs"], tempo_medio_ubs["tempo_util_seg"], color='green')
         ax3.set_xlabel("UBS")
         ax3.set_ylabel("Tempo Médio (segundos)")
-        ax3.set_title("Tempo Médio de Atendimento por UBS")
+        ax3.setTitle("Tempo Médio de Atendimento por UBS")
         plt.xticks(rotation=45, ha="right")
         st.pyplot(fig3)
         
@@ -494,16 +489,6 @@ def exportar_dados_page():
     else:
         st.write("Nenhum item de inventário para exportar.")
 
-def chat_admin_wrapper():
-    """Função wrapper para chamar chat_admin_page do módulo chat."""
-    from chat import chat_admin_page
-    chat_admin_page()
-
-def chat_usuario_wrapper():
-    """Função wrapper para chamar chat_usuario_page do módulo chat."""
-    from chat import chat_usuario_page
-    chat_usuario_page(st.session_state["username"])
-
 def sair_page():
     st.session_state["logged_in"] = False
     st.session_state["username"] = ""
@@ -521,8 +506,6 @@ pages = {
     "Administração": administracao_page,
     "Relatórios": relatorios_page,
     "Exportar Dados": exportar_dados_page,
-    "Chat": chat_usuario_wrapper,       # Chat para o usuário comum
-    "Chat Admin": chat_admin_wrapper,   # Chat para o administrador
     "Sair": sair_page,
 }
 
