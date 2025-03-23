@@ -12,6 +12,7 @@ from st_aggrid import AgGrid, GridOptionsBuilder
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
     add_chamado,
+    get_chamado_by_protocolo,
     list_chamados,
     list_chamados_em_aberto,
     finalizar_chamado,
@@ -42,8 +43,7 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# --- Menu ---
-# Para melhorar a experiência em smartphones, usamos um menu horizontal.
+# Definição do menu
 if st.session_state.logged_in:
     if is_admin(st.session_state.username):
         menu_options = [
@@ -58,14 +58,10 @@ if st.session_state.logged_in:
             "Sair"
         ]
     else:
+        # Usuários comuns: somente abrir chamado e buscar chamado
         menu_options = [
-            "Dashboard",
             "Abrir Chamado",
-            "Chamados Técnicos",
-            "Inventário",
-            "Estoque",
-            "Relatórios",
-            "Exportar Dados",
+            "Buscar Chamado",
             "Sair"
         ]
 else:
@@ -92,7 +88,7 @@ selected = option_menu(
     }
 )
 
-# --- Páginas do App ---
+# --- Funções das Páginas ---
 
 def login_page():
     st.subheader("Login")
@@ -109,15 +105,12 @@ def login_page():
             st.error("Usuário ou senha incorretos.")
 
 def dashboard_page():
-    st.subheader("Dashboard")
-    # KPIs
+    st.subheader("Dashboard - Administrativo")
     chamados = list_chamados()
     total_chamados = len(chamados) if chamados else 0
-    chamados_abertos = len(list_chamados_em_aberto()) if chamados else 0
+    abertos = len(list_chamados_em_aberto()) if chamados else 0
     st.metric("Total de Chamados", total_chamados)
-    st.metric("Chamados Abertos", chamados_abertos)
-    
-    # Exibe um gráfico de tendência de chamados por mês (global)
+    st.metric("Chamados Abertos", abertos)
     if chamados:
         df = pd.DataFrame(chamados)
         df["hora_abertura_dt"] = pd.to_datetime(df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
@@ -130,25 +123,13 @@ def dashboard_page():
         ax.set_title("Tendência de Chamados no Tempo")
         plt.xticks(rotation=45)
         st.pyplot(fig)
-        
-        # Notificação: se houver chamados abertos com tempo de atendimento superior a um limiar (ex.: 48h úteis)
-        atrasados = []
-        for c in chamados:
-            if c.get("hora_fechamento") is None:
-                try:
-                    abertura = datetime.strptime(c["hora_abertura"], '%d/%m/%Y %H:%M:%S')
-                    tempo_util = calculate_working_hours(abertura, datetime.now())
-                    if tempo_util > timedelta(hours=48):
-                        atrasados.append(c)
-                except:
-                    pass
-        if atrasados:
-            st.warning(f"Atenção: Existem {len(atrasados)} chamados abertos com mais de 48h úteis de atraso!")
+    else:
+        st.write("Nenhum chamado registrado.")
 
 def abrir_chamado_page():
     st.subheader("Abrir Chamado Técnico")
     patrimonio = st.text_input("Número de Patrimônio (opcional)")
-    # Campo opcional para agendar data da manutenção
+    # Campo opcional para agendamento de manutenção
     data_agendada = st.date_input("Data Agendada para Manutenção (opcional)")
     machine_info = None
     machine_type = None
@@ -192,7 +173,6 @@ def abrir_chamado_page():
     problema = st.text_area("Descreva o problema ou solicitação")
     
     if st.button("Abrir Chamado"):
-        # Se o usuário agendou uma data, adiciona-a aos dados (opcional)
         agendamento = data_agendada.strftime('%d/%m/%Y') if data_agendada else None
         protocolo = add_chamado(
             st.session_state.username,
@@ -206,6 +186,17 @@ def abrir_chamado_page():
             st.success(f"Chamado aberto com sucesso! Protocolo: {protocolo}")
         else:
             st.error("Erro ao abrir chamado.")
+
+def buscar_chamado_page():
+    st.subheader("Buscar Chamado")
+    protocolo = st.text_input("Informe o protocolo do chamado")
+    if st.button("Buscar"):
+        chamado = get_chamado_by_protocolo(protocolo)
+        if chamado:
+            st.write("Chamado encontrado:")
+            st.json(chamado)
+        else:
+            st.error("Chamado não encontrado.")
 
 def chamados_tecnicos_page():
     st.subheader("Chamados Técnicos")
@@ -226,14 +217,12 @@ def chamados_tecnicos_page():
         else:
             return "Em aberto"
     df["Tempo Util"] = df.apply(calcula_tempo, axis=1)
-    # Exibe com AgGrid para interatividade
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_pagination(paginationAutoPageSize=True)
     gb.configure_default_column(filter=True, sortable=True)
     grid_options = gb.build()
     AgGrid(df, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
     
-    # Área para finalizar chamados (com comentários)
     df_aberto = df[df["hora_fechamento"].isnull()]
     if df_aberto.empty:
         st.write("Não há chamados abertos para finalizar.")
@@ -255,20 +244,14 @@ def chamados_tecnicos_page():
         solucao_selecionada = st.selectbox("Selecione a solução", solucao_options)
         solucao_complementar = st.text_area("Detalhes adicionais da solução (opcional)")
         solucao_final = solucao_selecionada + ((" - " + solucao_complementar) if solucao_complementar else "")
-        
-        # Área para inserir comentários (simples, para acompanhamento)
-        comentarios = st.text_area("Comentários adicionais (ex.: instruções para o técnico)")
-        
-        # Seleção de peças utilizadas a partir do estoque
+        comentarios = st.text_area("Comentários adicionais (opcional)")
         estoque_data = get_estoque()
         pieces_list = [item["nome"] for item in estoque_data] if estoque_data else []
         pecas_selecionadas = st.multiselect("Selecione as peças utilizadas (se houver)", pieces_list)
-        
         if st.button("Finalizar Chamado"):
             if solucao_final:
-                # Você pode concatenar os comentários na solução ou salvá-los em outro registro
-                solucao_final_completa = solucao_final + (f" | Comentários: {comentarios}" if comentarios else "")
-                finalizar_chamado(chamado_id, solucao_final_completa, pecas_usadas=pecas_selecionadas)
+                solucao_completa = solucao_final + (f" | Comentários: {comentarios}" if comentarios else "")
+                finalizar_chamado(chamado_id, solucao_completa, pecas_usadas=pecas_selecionadas)
             else:
                 st.error("Informe a solução para finalizar o chamado.")
 
@@ -498,7 +481,9 @@ def exportar_dados_page():
         st.write("Nenhum item de inventário para exportar.")
 
 def sair_page():
-    logout()
+    st.session_state.logged_in = False
+    st.session_state.username = ""
+    st.success("Você saiu.")
 
 # Mapeamento das páginas
 pages = {
