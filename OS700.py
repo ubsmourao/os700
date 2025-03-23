@@ -41,56 +41,55 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# --- Layout do Menu ---
-# Podemos utilizar a sidebar com estilos customizados para um visual mais moderno.
-with st.sidebar:
-    st.header("Menu")
-    if st.session_state.logged_in:
-        if is_admin(st.session_state.username):
-            menu_options = [
-                "Home",
-                "Abrir Chamado",
-                "Chamados Técnicos",
-                "Inventário",
-                "Estoque",
-                "Administração",
-                "Relatórios",
-                "Sair"
-            ]
-        else:
-            menu_options = [
-                "Home",
-                "Abrir Chamado",
-                "Chamados Técnicos",
-                "Inventário",
-                "Estoque",
-                "Relatórios",
-                "Sair"
-            ]
+# --- Menu Horizontal (ótimo para smartphones) ---
+if st.session_state.logged_in:
+    if is_admin(st.session_state.username):
+        menu_options = [
+            "Home",
+            "Abrir Chamado",
+            "Chamados Técnicos",
+            "Inventário",
+            "Estoque",
+            "Administração",
+            "Relatórios",
+            "Sair"
+        ]
     else:
-        menu_options = ["Login"]
-    selected = option_menu(
-        menu_title="Navegação",
-        options=menu_options,
-        icons=["house", "chat-left-text", "card-list", "clipboard-data", "box-seam", "gear", "bar-chart-line", "box-arrow-right"],
-        menu_icon="cast",
-        default_index=0,
-        orientation="vertical",
-        styles={
-            "container": {"padding": "5!important", "background-color": "#F5F5F5"},
-            "icon": {"color": "black", "font-size": "18px"},
-            "nav-link": {
-                "font-size": "16px",
-                "text-align": "left",
-                "margin": "0px",
-                "color": "black",
-                "padding": "10px"
-            },
-            "nav-link-selected": {"background-color": "#0275d8", "color": "white"}
-        }
-    )
+        menu_options = [
+            "Home",
+            "Abrir Chamado",
+            "Chamados Técnicos",
+            "Inventário",
+            "Estoque",
+            "Relatórios",
+            "Sair"
+        ]
+else:
+    menu_options = ["Login"]
+
+selected = option_menu(
+    menu_title=None,
+    options=menu_options,
+    icons=["house", "chat-left-text", "card-list", "clipboard-data", "box-seam", "gear", "bar-chart-line", "box-arrow-right"],
+    menu_icon="cast",
+    default_index=0,
+    orientation="horizontal",
+    styles={
+        "container": {"padding": "5!important", "background-color": "#F5F5F5"},
+        "icon": {"color": "black", "font-size": "18px"},
+        "nav-link": {
+            "font-size": "16px",
+            "text-align": "center",
+            "margin": "0px",
+            "color": "black",
+            "padding": "10px"
+        },
+        "nav-link-selected": {"background-color": "#0275d8", "color": "white"}
+    }
+)
 
 # --- Funções das Páginas ---
+
 def login_page():
     st.subheader("Login")
     username = st.text_input("Usuário")
@@ -107,7 +106,7 @@ def login_page():
 
 def home_page():
     st.subheader("Bem-vindo!")
-    st.write("Selecione uma opção no menu à esquerda para começar.")
+    st.write("Selecione uma opção no menu para começar.")
 
 def abrir_chamado_page():
     st.subheader("Abrir Chamado Técnico")
@@ -135,19 +134,32 @@ def abrir_chamado_page():
 
     if machine_type == "Computador":
         defect_options = [
-            "Computador não liga", "Computador lento", "Tela azul", "Sistema travando",
-            "Erro de disco", "Problema com atualização", "Desligamento inesperado",
-            "Problemas de internet", "Problema com Wi-Fi", "Sem conexão de rede",
-            "Mouse não funciona", "Teclado não funciona"
+            "Computador não liga",
+            "Computador lento",
+            "Tela azul",
+            "Sistema travando",
+            "Erro de disco",
+            "Problema com atualização",
+            "Desligamento inesperado",
+            "Problemas de internet",
+            "Problema com Wi-Fi",
+            "Sem conexão de rede",
+            "Mouse não funciona",
+            "Teclado não funciona"
         ]
     elif machine_type == "Impressora":
         defect_options = [
-            "Impressora não imprime", "Impressão borrada", "Toner vazio", "Troca de toner",
-            "Papel enroscado", "Erro de conexão com a impressora"
+            "Impressora não imprime",
+            "Impressão borrada",
+            "Toner vazio",
+            "Troca de toner",
+            "Papel enroscado",
+            "Erro de conexão com a impressora"
         ]
     else:
         defect_options = [
-            "Solicitação de suporte geral", "Outros tipos de defeito"
+            "Solicitação de suporte geral",
+            "Outros tipos de defeito"
         ]
     
     tipo_defeito = st.selectbox("Tipo de Defeito/Solicitação", defect_options)
@@ -155,7 +167,11 @@ def abrir_chamado_page():
     
     if st.button("Abrir Chamado"):
         protocolo = add_chamado(
-            st.session_state.username, ubs_selecionada, setor, tipo_defeito, problema,
+            st.session_state.username,
+            ubs_selecionada,
+            setor,
+            tipo_defeito,
+            problema,
             patrimonio=patrimonio
         )
         if protocolo:
@@ -184,7 +200,7 @@ def chamados_tecnicos_page():
     df["Tempo Util"] = df.apply(calcula_tempo, axis=1)
     st.dataframe(df)
     
-    # Finalização integrada no painel
+    # Finalização integrada no painel de chamados técnicos
     df_aberto = df[df["hora_fechamento"].isnull()]
     if df_aberto.empty:
         st.write("Não há chamados abertos para finalizar.")
@@ -195,18 +211,23 @@ def chamados_tecnicos_page():
         st.write(f"Problema: {chamado['problema']}")
         if "impressora" in chamado.get("tipo_defeito", "").lower():
             solucao_options = [
-                "Limpeza e recalibração da impressora", "Substituição de cartucho/toner",
-                "Verificação de conexão e drivers", "Reinicialização da impressora"
+                "Limpeza e recalibração da impressora",
+                "Substituição de cartucho/toner",
+                "Verificação de conexão e drivers",
+                "Reinicialização da impressora"
             ]
         else:
             solucao_options = [
-                "Reinicialização do sistema", "Atualização de drivers/software",
-                "Substituição de componente (ex.: HD, memória)", "Verificação de vírus/malware"
+                "Reinicialização do sistema",
+                "Atualização de drivers/software",
+                "Substituição de componente (ex.: HD, memória)",
+                "Verificação de vírus/malware"
             ]
         solucao_selecionada = st.selectbox("Selecione a solução", solucao_options)
         solucao_complementar = st.text_area("Detalhes adicionais da solução (opcional)")
         solucao_final = solucao_selecionada + ((" - " + solucao_complementar) if solucao_complementar else "")
         
+        # Seleção de peças utilizadas a partir do estoque
         estoque_data = get_estoque()
         pieces_list = [item["nome"] for item in estoque_data] if estoque_data else []
         pecas_selecionadas = st.multiselect("Selecione as peças utilizadas (se houver)", pieces_list)
@@ -231,7 +252,10 @@ def estoque_page():
 def administracao_page():
     st.subheader("Administração")
     admin_option = st.selectbox("Opções de Administração", [
-        "Cadastro de Usuário", "Gerenciar UBSs", "Gerenciar Setores", "Lista de Usuários"
+        "Cadastro de Usuário",
+        "Gerenciar UBSs",
+        "Gerenciar Setores",
+        "Lista de Usuários"
     ])
     if admin_option == "Cadastro de Usuário":
         novo_user = st.text_input("Novo Usuário")
@@ -353,37 +377,32 @@ def relatorios_page():
     st.markdown("#### Chamados por UBS por Mês (detalhado)")
     st.dataframe(chamados_ubs_detalhado)
     
-    # Geração de PDF para relatórios de chamados
+    # Geração de PDF para Relatório de Chamados
     if st.button("Gerar Relatório de Chamados em PDF"):
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", "B", 16)
         pdf.cell(0, 10, "Relatório de Chamados - Gestão de Parque de Informática", ln=True, align="C")
         pdf.ln(10)
-        
         pdf.set_font("Arial", "", 12)
         pdf.cell(0, 10, f"Período: {start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')}", ln=True)
         if filtro_ubs:
             pdf.cell(0, 10, f"UBS: {', '.join(filtro_ubs)}", ln=True)
         pdf.ln(5)
-        
         pdf.cell(0, 10, "Chamados por UBS por Mês:", ln=True)
         for idx, row in chamados_ubs_detalhado.iterrows():
             pdf.cell(0, 8, f"UBS: {row['ubs']} | Mês: {row['mes']} | Qtd: {row['qtd_chamados']}", ln=True)
         pdf.ln(5)
-        
         pdf.cell(0, 10, "Chamados por Setor:", ln=True)
         for idx, row in chamados_setor.iterrows():
             pdf.cell(0, 8, f"Setor: {row['setor']} | Qtd: {row['qtd_chamados']}", ln=True)
         pdf.ln(5)
-        
         if not df_valid.empty:
             pdf.cell(0, 10, "Tempo Médio de Atendimento por UBS (horas úteis):", ln=True)
             for idx, row in tempo_medio_ubs.iterrows():
                 pdf.cell(0, 8, f"UBS: {row['ubs']} | Tempo Médio: {row['Tempo Médio']}", ln=True)
             pdf.ln(5)
             pdf.cell(0, 10, f"Tempo médio global (horas úteis): {horas_global}h {minutos_global}m", ln=True)
-        
         pdf_output = pdf.output(dest="S")
         st.download_button("Baixar Relatório de Chamados em PDF", data=pdf_output, file_name="relatorio_chamados.pdf", mime="application/pdf")
     
@@ -401,9 +420,11 @@ def relatorios_page():
             pdf_inv.ln(10)
             pdf_inv.set_font("Arial", "", 12)
             for idx, row in df_inv.iterrows():
-                linha = (f"Patrimônio: {row.get('numero_patrimonio')} | Tipo: {row.get('tipo')} | "
-                         f"Marca: {row.get('marca')} | Modelo: {row.get('modelo')} | "
-                         f"UBS: {row.get('localizacao')} | Setor: {row.get('setor')}")
+                linha = (
+                    f"Patrimônio: {row.get('numero_patrimonio')} | Tipo: {row.get('tipo')} | "
+                    f"Marca: {row.get('marca')} | Modelo: {row.get('modelo')} | "
+                    f"UBS: {row.get('localizacao')} | Setor: {row.get('setor')}"
+                )
                 pdf_inv.multi_cell(0, 8, linha)
             pdf_inv_output = pdf_inv.output(dest="S")
             st.download_button("Baixar Relatório do Inventário em PDF", data=pdf_inv_output, file_name="relatorio_inventario.pdf", mime="application/pdf")
