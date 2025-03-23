@@ -1,6 +1,11 @@
+# chamados.py
 import streamlit as st
 from supabase_client import supabase
 from datetime import datetime, timedelta
+import pytz
+
+# Define o fuso de Fortaleza
+FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
 
 def gerar_protocolo_sequencial():
     try:
@@ -38,18 +43,25 @@ def buscar_no_inventario_por_patrimonio(patrimonio):
         return None
 
 def add_chamado(username, ubs, setor, tipo_defeito, problema, machine=None, patrimonio=None):
+    """
+    Cria um chamado no Supabase, definindo a hora de abertura
+    com o fuso horário de Fortaleza (UTC−3).
+    """
     try:
         protocolo = gerar_protocolo_sequencial()
         if protocolo is None:
             return None
-        hora_abertura = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+
+        # Gera horário local de Fortaleza
+        hora_local = datetime.now(FORTALEZA_TZ).strftime('%d/%m/%Y %H:%M:%S')
+
         data = {
             "username": username,
             "ubs": ubs,
             "setor": setor,
             "tipo_defeito": tipo_defeito,
             "problema": problema,
-            "hora_abertura": hora_abertura,
+            "hora_abertura": hora_local,  # <-- horário local
             "protocolo": protocolo,
             "machine": machine,
             "patrimonio": patrimonio
@@ -62,29 +74,39 @@ def add_chamado(username, ubs, setor, tipo_defeito, problema, machine=None, patr
         return None
 
 def finalizar_chamado(id_chamado, solucao, pecas_usadas=None):
+    """
+    Finaliza um chamado, definindo a hora de fechamento
+    com o fuso horário de Fortaleza (UTC−3).
+    Também insere as peças usadas e registra histórico de manutenção.
+    """
     try:
-        hora_fechamento = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        # Hora local de Fortaleza
+        hora_fechamento_local = datetime.now(FORTALEZA_TZ).strftime('%d/%m/%Y %H:%M:%S')
+
+        # Atualiza o chamado com a solução e a hora de fechamento
         supabase.table("chamados").update({
             "solucao": solucao,
-            "hora_fechamento": hora_fechamento
+            "hora_fechamento": hora_fechamento_local
         }).eq("id", id_chamado).execute()
         
-        # Se nenhuma entrada de peças for fornecida, usa uma entrada padrão (mas idealmente, no OS700.py, você fornecerá o multiselect)
+        # Se nenhuma entrada de peças for fornecida, pergunta ao usuário
         if pecas_usadas is None:
             pecas_input = st.text_area("Informe as peças utilizadas (separadas por vírgula)")
             pecas_usadas = [p.strip() for p in pecas_input.split(",") if p.strip()] if pecas_input else []
         
+        # Se houver peças usadas, insere na tabela pecas_usadas e dá baixa no estoque
         if pecas_usadas:
             for peca in pecas_usadas:
                 supabase.table("pecas_usadas").insert({
                     "chamado_id": id_chamado,
                     "peca_nome": peca,
-                    "data_uso": hora_fechamento
+                    "data_uso": hora_fechamento_local
                 }).execute()
-                # Dar baixa no estoque para cada peça utilizada
+                # Dar baixa no estoque
                 from estoque import dar_baixa_estoque
                 dar_baixa_estoque(peca, quantidade_usada=1)
         
+        # Busca o patrimônio vinculado ao chamado para registrar histórico de manutenção
         resp = supabase.table("chamados").select("patrimonio").eq("id", id_chamado).execute()
         if resp.data and len(resp.data) > 0:
             patrimonio = resp.data[0].get("patrimonio")
@@ -96,7 +118,7 @@ def finalizar_chamado(id_chamado, solucao, pecas_usadas=None):
             supabase.table("historico_manutencao").insert({
                 "numero_patrimonio": patrimonio,
                 "descricao": descricao,
-                "data_manutencao": hora_fechamento
+                "data_manutencao": hora_fechamento_local
             }).execute()
         
         st.success(f"Chamado {id_chamado} finalizado.")
@@ -104,6 +126,9 @@ def finalizar_chamado(id_chamado, solucao, pecas_usadas=None):
         st.error(f"Erro ao finalizar chamado: {e}")
 
 def list_chamados():
+    """
+    Retorna todos os chamados da tabela 'chamados'.
+    """
     try:
         resp = supabase.table("chamados").select("*").execute()
         return resp.data
@@ -112,6 +137,9 @@ def list_chamados():
         return []
 
 def list_chamados_em_aberto():
+    """
+    Retorna todos os chamados onde hora_fechamento IS NULL.
+    """
     try:
         resp = supabase.table("chamados").select("*").is_("hora_fechamento", None).execute()
         return resp.data
@@ -120,6 +148,9 @@ def list_chamados_em_aberto():
         return []
 
 def get_chamados_por_patrimonio(patrimonio):
+    """
+    Retorna todos os chamados vinculados a um patrimônio específico.
+    """
     try:
         resp = supabase.table("chamados").select("*").eq("patrimonio", patrimonio).execute()
         return resp.data if resp.data else []
@@ -129,11 +160,11 @@ def get_chamados_por_patrimonio(patrimonio):
 
 def calculate_working_hours(start, end):
     """
-    Calcula o tempo util entre 'start' e 'end', considerando um expediente:
-      - Manha: 08:00 a 12:00
+    Calcula o tempo útil entre 'start' e 'end', considerando o expediente:
+      - Manhã: 08:00 a 12:00
       - Tarde: 13:00 a 17:00
-    Ignora finais de semana.
-    Retorna um objeto timedelta com o tempo util.
+    Ignora sábados e domingos.
+    Retorna um objeto timedelta com o tempo útil.
     """
     if start >= end:
         return timedelta(0)
@@ -142,30 +173,35 @@ def calculate_working_hours(start, end):
     current = start
 
     while current < end:
+        # Se for sábado (5) ou domingo (6), pula para o próximo dia
         if current.weekday() >= 5:
             current = datetime.combine(current.date() + timedelta(days=1), datetime.min.time())
             continue
 
+        # Definição de horários
         morning_start = current.replace(hour=8, minute=0, second=0, microsecond=0)
         morning_end = current.replace(hour=12, minute=0, second=0, microsecond=0)
         afternoon_start = current.replace(hour=13, minute=0, second=0, microsecond=0)
         afternoon_end = current.replace(hour=17, minute=0, second=0, microsecond=0)
 
+        # Manhã
         if end > morning_start:
             interval_start = max(current, morning_start)
             interval_end = min(end, morning_end)
             if interval_end > interval_start:
                 total_seconds += (interval_end - interval_start).total_seconds()
         
+        # Tarde
         if end > afternoon_start:
             interval_start = max(current, afternoon_start)
             interval_end = min(end, afternoon_end)
             if interval_end > interval_start:
                 total_seconds += (interval_end - interval_start).total_seconds()
         
+        # Avança para o próximo dia, 00:00
         current = datetime.combine(current.date() + timedelta(days=1), datetime.min.time())
     
     return timedelta(seconds=total_seconds)
 
 if __name__ == "__main__":
-    st.write("Modulo de Chamados Tecnicos")
+    st.write("Módulo de Chamados - Supabase - Hora Local de Fortaleza")
