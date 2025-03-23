@@ -9,18 +9,19 @@ from fpdf import FPDF
 from st_aggrid import AgGrid, GridOptionsBuilder
 from io import BytesIO
 
+# Importa a função now com timezone se quiser exibir localmente
 import pytz
-FORTALEZA_TZ = pytz.timezone("America/Fortaleza")  # Timezone de Fortaleza, CE
+FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
 
-# Importação dos módulos internos
+# Módulos internos
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
-    add_chamado as add_chamado_base,
+    add_chamado,             # Supondo que dentro de chamados.py já salva hora local
     get_chamado_by_protocolo,
     list_chamados,
     list_chamados_em_aberto,
     buscar_no_inventario_por_patrimonio,
-    finalizar_chamado as finalizar_chamado_base,
+    finalizar_chamado,       # Supondo que dentro de chamados.py já salva hora_fechamento local
     calculate_working_hours
 )
 from inventario import show_inventory_list, cadastro_maquina, get_machines_from_inventory
@@ -28,10 +29,10 @@ from ubs import get_ubs_list
 from setores import get_setores_list
 from estoque import manage_estoque, get_estoque
 
-# Configuração do logging
+# Configuração de logging
 logging.basicConfig(level=logging.INFO)
 
-# Inicializa variáveis de sessão
+# Inicialização de sessão
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "username" not in st.session_state:
@@ -46,22 +47,6 @@ else:
     st.warning("Logotipo não encontrado.")
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
-
-# --- Ajuste das Funções de Chamado para Horário Local ---
-
-def add_chamado(username, ubs, setor, tipo_defeito, problema, patrimonio=None):
-    """
-    Envolve a função add_chamado_base, mas define hora_abertura com fuso de Fortaleza.
-    """
-    hora_local = datetime.now(FORTALEZA_TZ).strftime('%d/%m/%Y %H:%M:%S')
-    return add_chamado_base(username, ubs, setor, tipo_defeito, problema, hora_abertura_custom=hora_local, patrimonio=patrimonio)
-
-def finalizar_chamado(chamado_id, solucao, pecas_usadas=None):
-    """
-    Envolve a função finalizar_chamado_base, mas define hora_fechamento com fuso de Fortaleza.
-    """
-    hora_local = datetime.now(FORTALEZA_TZ).strftime('%d/%m/%Y %H:%M:%S')
-    return finalizar_chamado_base(chamado_id, solucao, pecas_usadas=pecas_usadas, hora_fechamento_custom=hora_local)
 
 # --- Função Auxiliar para Exibir Chamado ---
 def exibir_chamado(chamado):
@@ -149,9 +134,9 @@ def login_page():
 
 def dashboard_page():
     st.subheader("Dashboard - Administrativo")
-    # Exibe horário local de Fortaleza
+    # Exibe o horário local de Fortaleza
     agora_fortaleza = datetime.now(FORTALEZA_TZ)
-    st.markdown(f"**Horário atual (Fortaleza):** {agora_fortaleza.strftime('%d/%m/%Y %H:%M:%S')}")
+    st.markdown(f"**Horário local (Fortaleza):** {agora_fortaleza.strftime('%d/%m/%Y %H:%M:%S')}")
 
     chamados = list_chamados()
     total_chamados = len(chamados) if chamados else 0
@@ -267,6 +252,7 @@ def chamados_tecnicos_page():
         st.write("Nenhum chamado técnico encontrado.")
         return
     df = pd.DataFrame(chamados)
+
     def calcula_tempo(row):
         if pd.notnull(row.get("hora_fechamento")):
             try:
@@ -278,12 +264,15 @@ def chamados_tecnicos_page():
                 return "Erro"
         else:
             return "Em aberto"
+
     df["Tempo Util"] = df.apply(calcula_tempo, axis=1)
+
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_default_column(filter=True, sortable=True)
     gb.configure_pagination(paginationAutoPageSize=True)
     gb.configure_grid_options(domLayout='normal')
     grid_options = gb.build()
+
     AgGrid(df, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
     
     df_aberto = df[df["hora_fechamento"].isnull()]
@@ -294,6 +283,7 @@ def chamados_tecnicos_page():
         chamado_id = st.selectbox("Selecione o ID do chamado para finalizar", df_aberto["id"].tolist())
         chamado = df_aberto[df_aberto["id"] == chamado_id].iloc[0]
         st.write(f"Problema: {chamado['problema']}")
+
         if "impressora" in chamado.get("tipo_defeito", "").lower():
             solucao_options = [
                 "Limpeza e recalibração da impressora", "Substituição de cartucho/toner",
@@ -304,17 +294,21 @@ def chamados_tecnicos_page():
                 "Reinicialização do sistema", "Atualização de drivers/software",
                 "Substituição de componente (ex.: HD, memória)", "Verificação de vírus/malware"
             ]
+
         solucao_selecionada = st.selectbox("Selecione a solução", solucao_options)
         solucao_complementar = st.text_area("Detalhes adicionais da solução (opcional)")
         solucao_final = solucao_selecionada + ((" - " + solucao_complementar) if solucao_complementar else "")
         comentarios = st.text_area("Comentários adicionais (opcional)")
+
         estoque_data = get_estoque()
         pieces_list = [item["nome"] for item in estoque_data] if estoque_data else []
         pecas_selecionadas = st.multiselect("Selecione as peças utilizadas (se houver)", pieces_list)
+
         if st.button("Finalizar Chamado"):
             if solucao_final:
                 solucao_completa = solucao_final + (f" | Comentários: {comentarios}" if comentarios else "")
-                finalizar_chamado(chamado_id, solucao_completa, pecas_selecionadas)
+                # Chama a função de finalizar sem passar hora_fechamento_custom
+                finalizar_chamado(chamado_id, solucao_completa, pecas_usadas=pecas_selecionadas)
             else:
                 st.error("Informe a solução para finalizar o chamado.")
 
@@ -380,7 +374,7 @@ def relatorios_page():
         st.error("Data Início não pode ser maior que Data Fim")
         return
 
-    # Exibe horário local de Fortaleza no relatório
+    # Exibe horário local de Fortaleza
     agora_fortaleza = datetime.now(FORTALEZA_TZ)
     st.markdown(f"**Horário local (Fortaleza):** {agora_fortaleza.strftime('%d/%m/%Y %H:%M:%S')}")
 
@@ -406,9 +400,7 @@ def relatorios_page():
     
     df_period["mes"] = df_period["hora_abertura_dt"].dt.to_period("M").astype(str)
 
-    # Métricas implantadas
-
-    # 1) Volume de Chamados (Abertos vs Fechados)
+    # 1) Volume de Chamados (Abertos vs. Fechados)
     chamados_abertos = df_period[df_period["hora_fechamento"].isnull()].shape[0]
     chamados_fechados = df_period[df_period["hora_fechamento"].notnull()].shape[0]
     st.markdown(f"**Chamados Abertos (período):** {chamados_abertos}")
@@ -461,7 +453,6 @@ def relatorios_page():
         st.markdown("#### Chamados por Dia da Semana")
         st.dataframe(chamados_por_dia)
 
-    # Estatísticas gerais no período
     chamados_ubs_mes = df_period.groupby(["ubs", "mes"]).size().reset_index(name="qtd_chamados")
     st.markdown("#### Chamados por UBS por Mês")
     st.dataframe(chamados_ubs_mes)
@@ -476,7 +467,6 @@ def relatorios_page():
     plt.xticks(rotation=45)
     st.pyplot(fig1)
 
-    # Exportação em PDF
     if st.button("Gerar Relatório de Chamados em PDF"):
         pdf = FPDF()
         pdf.add_page()
