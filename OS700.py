@@ -8,7 +8,7 @@ from streamlit_option_menu import option_menu
 from fpdf import FPDF
 from st_aggrid import AgGrid, GridOptionsBuilder
 
-# Importação dos módulos internos
+# Importação dos módulos e funções (presume que estes módulos já estão implementados e funcionando)
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
     add_chamado,
@@ -43,7 +43,7 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# Definição do menu conforme o perfil do usuário
+# Definição do menu conforme perfil do usuário
 if st.session_state.logged_in:
     if is_admin(st.session_state.username):
         menu_options = [
@@ -58,6 +58,7 @@ if st.session_state.logged_in:
             "Sair"
         ]
     else:
+        # Usuários comuns terão acesso apenas a abrir chamado, buscar chamado e sair
         menu_options = [
             "Abrir Chamado",
             "Buscar Chamado",
@@ -69,7 +70,7 @@ else:
 selected = option_menu(
     menu_title=None,
     options=menu_options,
-    icons=["speedometer", "chat-left-text", "card-list", "clipboard-data", "box-seam", "gear", "bar-chart-line", "download", "box-arrow-right"],
+    icons=["speedometer", "chat-left-text", "search", "box-arrow-right"],
     menu_icon="cast",
     default_index=0,
     orientation="horizontal",
@@ -183,14 +184,17 @@ def abrir_chamado_page():
 
 def buscar_chamado_page():
     st.subheader("Buscar Chamado")
-    protocolo = st.text_input("Informe o protocolo do chamado")
+    protocolo = st.text_input("Informe o número de protocolo do chamado")
     if st.button("Buscar"):
-        chamado = get_chamado_by_protocolo(protocolo)
-        if chamado:
-            st.write("Chamado encontrado:")
-            st.json(chamado)
+        if protocolo:
+            chamado = get_chamado_by_protocolo(protocolo)
+            if chamado:
+                st.write("Chamado encontrado:")
+                st.json(chamado)
+            else:
+                st.error("Chamado não encontrado.")
         else:
-            st.error("Chamado não encontrado.")
+            st.warning("Por favor, insira o número de protocolo.")
 
 def chamados_tecnicos_page():
     st.subheader("Chamados Técnicos")
@@ -485,12 +489,12 @@ pages = {
     "Dashboard": dashboard_page,
     "Abrir Chamado": abrir_chamado_page,
     "Chamados Técnicos": chamados_tecnicos_page,
+    "Buscar Chamado": buscar_chamado_page,
     "Inventário": inventario_page,
     "Estoque": estoque_page,
     "Administração": administracao_page,
     "Relatórios": relatorios_page,
     "Exportar Dados": exportar_dados_page,
-    "Buscar Chamado": buscar_chamado_page,
     "Sair": sair_page,
 }
 
