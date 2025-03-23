@@ -9,9 +9,6 @@ from fpdf import FPDF
 from st_aggrid import AgGrid, GridOptionsBuilder
 from io import BytesIO
 
-# Importa a função message do streamlit_chat com alias para evitar conflitos
-from streamlit_chat import message as st_chat_message
-
 # Importação dos módulos internos – certifique-se de que esses módulos estão implementados
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
@@ -67,13 +64,12 @@ def exibir_chamado(chamado):
         st.markdown(chamado["solucao"])
 
 # --- Definição do Menu ---
-# Se o usuário estiver logado, defina o menu de acordo com o perfil
 if st.session_state["logged_in"]:
     if is_admin(st.session_state["username"]):
         menu_options = [
             "Dashboard",
             "Abrir Chamado",
-            "Buscar Chamado",  # Agora disponível também para administradores
+            "Buscar Chamado",
             "Chamados Técnicos",
             "Inventário",
             "Estoque",
@@ -132,7 +128,7 @@ def dashboard_page():
     col1.metric("Total de Chamados", total_chamados)
     col2.metric("Chamados Abertos", abertos)
     
-    # Notificação: chamados abertos com mais de 48h úteis
+    # Notificações: chamados abertos com mais de 48h úteis
     atrasados = []
     if chamados:
         agora = datetime.now()
@@ -151,9 +147,7 @@ def dashboard_page():
     # Gráfico de tendência
     if chamados:
         df = pd.DataFrame(chamados)
-        df["hora_abertura_dt"] = pd.to_datetime(
-            df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce'
-        )
+        df["hora_abertura_dt"] = pd.to_datetime(df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
         df["mes"] = df["hora_abertura_dt"].dt.to_period("M").astype(str)
         tendencia = df.groupby("mes").size().reset_index(name="qtd")
         fig, ax = plt.subplots(figsize=(8,4))
@@ -193,7 +187,7 @@ def abrir_chamado_page():
         defect_options = [
             "Computador não liga", "Computador lento", "Tela azul", "Sistema travando",
             "Erro de disco", "Problema com atualização", "Desligamento inesperado",
-            "Problemas de internet", "Problema com Wi-Fi", "Sem conexão de rede",
+            "Problema com internet", "Problema com Wi-Fi", "Sem conexão de rede",
             "Mouse não funciona", "Teclado não funciona"
         ]
     elif machine_type == "Impressora":
@@ -488,21 +482,22 @@ def exportar_dados_page():
 
 def chat_page():
     st.subheader("Chat com Suporte")
+    # Inicializa o histórico se ainda não existir
     if "chat_history" not in st.session_state:
         st.session_state["chat_history"] = []
-    # Exibe o histórico do chat usando streamlit_chat
+    # Exibe o histórico do chat usando Markdown
     for chat in st.session_state["chat_history"]:
         if chat["role"] == "user":
-            st_chat_message(chat["message"], is_user=True)
+            st.markdown(f"**Você:** {chat['message']}")
         else:
-            st_chat_message(chat["message"], is_user=False)
+            st.markdown(f"**Suporte:** {chat['message']}")
     user_input = st.text_input("Digite sua mensagem:", key="chat_input")
     if st.button("Enviar"):
         if user_input:
             st.session_state["chat_history"].append({"role": "user", "message": user_input})
-            # Resposta dummy – aqui você pode integrar um bot ou encaminhar para um técnico
+            # Resposta dummy – você pode integrar um bot ou encaminhar a mensagem para um técnico
             resposta = "Mensagem recebida. Em breve, um técnico responderá."
-            st.session_state["chat_history"].append({"role": "assistant", "message": resposta})
+            st.session_state["chat_history"].append({"role": "suporte", "message": resposta})
 
 def sair_page():
     st.session_state.update({"logged_in": False, "username": ""})
