@@ -9,10 +9,10 @@ from fpdf import FPDF
 from st_aggrid import AgGrid, GridOptionsBuilder
 from io import BytesIO
 
-# Importa a função message do streamlit_chat com um alias para evitar conflitos
+# Importa a função message do streamlit_chat com alias para evitar conflitos
 from streamlit_chat import message as st_chat_message
 
-# Importação dos módulos internos – certifique-se de que estes módulos estão implementados
+# Importação dos módulos internos – certifique-se de que esses módulos estão implementados
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
     add_chamado,
@@ -66,6 +66,48 @@ def exibir_chamado(chamado):
         st.markdown("### Solução")
         st.markdown(chamado["solucao"])
 
+# --- Definição do Menu ---
+# Se o usuário estiver logado, defina o menu de acordo com o perfil
+if st.session_state["logged_in"]:
+    if is_admin(st.session_state["username"]):
+        menu_options = [
+            "Dashboard",
+            "Abrir Chamado",
+            "Buscar Chamado",  # Agora disponível também para administradores
+            "Chamados Técnicos",
+            "Inventário",
+            "Estoque",
+            "Administração",
+            "Relatórios",
+            "Exportar Dados",
+            "Chat",
+            "Sair"
+        ]
+    else:
+        menu_options = [
+            "Abrir Chamado",
+            "Buscar Chamado",
+            "Chat",
+            "Sair"
+        ]
+else:
+    menu_options = ["Login"]
+
+selected = option_menu(
+    menu_title=None,
+    options=menu_options,
+    icons=["speedometer", "chat-left-text", "search", "card-list", "clipboard-data", "box-seam", "gear", "bar-chart-line", "download", "chat-dots", "box-arrow-right"],
+    menu_icon="cast",
+    default_index=0,
+    orientation="horizontal",
+    styles={
+        "container": {"padding": "5!important", "background-color": "#F5F5F5"},
+        "icon": {"color": "black", "font-size": "18px"},
+        "nav-link": {"font-size": "16px", "text-align": "center", "margin": "0px", "color": "black", "padding": "10px"},
+        "nav-link-selected": {"background-color": "#0275d8", "color": "white"}
+    }
+)
+
 # --- Funções das Páginas ---
 
 def login_page():
@@ -90,7 +132,7 @@ def dashboard_page():
     col1.metric("Total de Chamados", total_chamados)
     col2.metric("Chamados Abertos", abertos)
     
-    # Notificações: chamados abertos com mais de 48h úteis
+    # Notificação: chamados abertos com mais de 48h úteis
     atrasados = []
     if chamados:
         agora = datetime.now()
@@ -109,7 +151,9 @@ def dashboard_page():
     # Gráfico de tendência
     if chamados:
         df = pd.DataFrame(chamados)
-        df["hora_abertura_dt"] = pd.to_datetime(df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
+        df["hora_abertura_dt"] = pd.to_datetime(
+            df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce'
+        )
         df["mes"] = df["hora_abertura_dt"].dt.to_period("M").astype(str)
         tendencia = df.groupby("mes").size().reset_index(name="qtd")
         fig, ax = plt.subplots(figsize=(8,4))
