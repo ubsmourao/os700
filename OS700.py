@@ -488,7 +488,7 @@ def chat_page():
             # Aqui você pode implementar uma resposta automática ou encaminhar para um técnico
             resposta = "Mensagem recebida. Em breve um técnico responderá."
             st.session_state.chat_history.append({"role": "assistant", "message": resposta})
-            st.experimental_rerun()
+            
 
 def sair_page():
     st.session_state.logged_in = False
