@@ -9,10 +9,10 @@ from fpdf import FPDF
 from st_aggrid import AgGrid, GridOptionsBuilder
 from io import BytesIO
 
-# Importa a função "message" de streamlit_chat com um alias para evitar conflitos
+# Importa a função message do streamlit_chat com um alias para evitar conflitos
 from streamlit_chat import message as st_chat_message
 
-# Importação dos módulos internos – certifique-se que esses módulos estão implementados
+# Importação dos módulos internos – certifique-se de que esses módulos estão implementados
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
     add_chamado,
@@ -33,9 +33,9 @@ logging.basicConfig(level=logging.INFO)
 
 # Inicializa variáveis de sessão
 if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+    st.session_state["logged_in"] = False
 if "username" not in st.session_state:
-    st.session_state.username = ""
+    st.session_state["username"] = ""
 
 # Configuração da página
 st.set_page_config(page_title="Gestão de Parque de Informática", layout="wide")
@@ -48,8 +48,8 @@ else:
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
 # Definição do menu conforme o perfil do usuário
-if st.session_state.logged_in:
-    if is_admin(st.session_state.username):
+if st.session_state["logged_in"]:
+    if is_admin(st.session_state["username"]):
         menu_options = [
             "Dashboard",
             "Abrir Chamado",
@@ -82,7 +82,13 @@ selected = option_menu(
     styles={
         "container": {"padding": "5!important", "background-color": "#F5F5F5"},
         "icon": {"color": "black", "font-size": "18px"},
-        "nav-link": {"font-size": "16px", "text-align": "center", "margin": "0px", "color": "black", "padding": "10px"},
+        "nav-link": {
+            "font-size": "16px",
+            "text-align": "center",
+            "margin": "0px",
+            "color": "black",
+            "padding": "10px"
+        },
         "nav-link-selected": {"background-color": "#0275d8", "color": "white"}
     }
 )
@@ -98,8 +104,7 @@ def login_page():
             st.error("Preencha todos os campos.")
         elif authenticate(username, password):
             st.success(f"Bem-vindo, {username}!")
-            st.session_state.logged_in = True
-            st.session_state.username = username
+            st.session_state.update({"logged_in": True, "username": username})
         else:
             st.error("Usuário ou senha incorretos.")
 
@@ -112,7 +117,7 @@ def dashboard_page():
     col1.metric("Total de Chamados", total_chamados)
     col2.metric("Chamados Abertos", abertos)
     
-    # Notificação: chamados abertos com mais de 48h úteis
+    # Notificações: chamados abertos com mais de 48h úteis
     atrasados = []
     if chamados:
         agora = datetime.now()
@@ -186,7 +191,7 @@ def abrir_chamado_page():
     if st.button("Abrir Chamado"):
         agendamento = data_agendada.strftime('%d/%m/%Y') if data_agendada else None
         protocolo = add_chamado(
-            st.session_state.username,
+            st.session_state["username"],
             ubs_selecionada,
             setor,
             tipo_defeito,
@@ -205,11 +210,26 @@ def buscar_chamado_page():
         if protocolo:
             chamado = get_chamado_by_protocolo(protocolo)
             if chamado:
-                st.write("Chamado encontrado:")
-                st.json(chamado)
+                st.markdown("### Detalhes do Chamado")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(f"**Protocolo:** {chamado.get('protocolo', 'N/A')}")
+                    st.markdown(f"**Usuário:** {chamado.get('username', 'N/A')}")
+                    st.markdown(f"**UBS:** {chamado.get('ubs', 'N/A')}")
+                    st.markdown(f"**Setor:** {chamado.get('setor', 'N/A')}")
+                with col2:
+                    st.markdown(f"**Tipo de Defeito:** {chamado.get('tipo_defeito', 'N/A')}")
+                    st.markdown(f"**Problema:** {chamado.get('problema', 'N/A')}")
+                    st.markdown(f"**Hora de Abertura:** {chamado.get('hora_abertura', 'N/A')}")
+                    st.markdown(f"**Hora de Fechamento:** {chamado.get('hora_fechamento', 'Em aberto')}")
+                if chamado.get("solucao"):
+                    st.markdown("### Solução")
+                    st.markdown(chamado["solucao"])
                 if st.button("Visualizar Histórico"):
-                    st.write("Histórico do chamado:")
-                    st.json({"01/01/2023": "Chamado aberto", "02/01/2023": "Atualização", "03/01/2023": "Chamado finalizado"})
+                    st.markdown("### Histórico do Chamado")
+                    historico = chamado.get("historico", {"01/01/2023": "Chamado aberto", "02/01/2023": "Atualização", "03/01/2023": "Chamado finalizado"})
+                    for data, evento in historico.items():
+                        st.markdown(f"**{data}** - {evento}")
             else:
                 st.error("Chamado não encontrado.")
         else:
@@ -470,9 +490,9 @@ def exportar_dados_page():
 def chat_page():
     st.subheader("Chat com Suporte")
     if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
+        st.session_state["chat_history"] = []
     # Exibe o histórico do chat usando streamlit_chat
-    for chat in st.session_state.chat_history:
+    for chat in st.session_state["chat_history"]:
         if chat["role"] == "user":
             st_chat_message(chat["message"], is_user=True)
         else:
@@ -480,15 +500,13 @@ def chat_page():
     user_input = st.text_input("Digite sua mensagem:", key="chat_input")
     if st.button("Enviar"):
         if user_input:
-            st.session_state.chat_history.append({"role": "user", "message": user_input})
+            st.session_state["chat_history"].append({"role": "user", "message": user_input})
             # Resposta dummy – aqui você pode integrar um bot ou encaminhar para um técnico
-            resposta = "Mensagem recebida. Em breve um técnico responderá."
-            st.session_state.chat_history.append({"role": "assistant", "message": resposta})
-            # Não é necessário forçar rerun; o Streamlit já atualiza ao modificar a session_state
+            resposta = "Mensagem recebida. Em breve, um técnico responderá."
+            st.session_state["chat_history"].append({"role": "assistant", "message": resposta})
 
 def sair_page():
-    st.session_state["logged_in"] = False
-    st.session_state["username"] = ""
+    st.session_state.update({"logged_in": False, "username": ""})
     st.success("Você saiu.")
 
 # Mapeamento das páginas
