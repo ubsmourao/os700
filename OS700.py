@@ -9,19 +9,18 @@ from fpdf import FPDF
 from st_aggrid import AgGrid, GridOptionsBuilder
 from io import BytesIO
 
-# Importa a função now com timezone se quiser exibir localmente
 import pytz
-FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
+FORTALEZA_TZ = pytz.timezone("America/Fortaleza")  # Timezone de Fortaleza, CE
 
 # Módulos internos
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
-    add_chamado,             # Supondo que dentro de chamados.py já salva hora local
+    add_chamado,
     get_chamado_by_protocolo,
     list_chamados,
     list_chamados_em_aberto,
     buscar_no_inventario_por_patrimonio,
-    finalizar_chamado,       # Supondo que dentro de chamados.py já salva hora_fechamento local
+    finalizar_chamado,
     calculate_working_hours
 )
 from inventario import show_inventory_list, cadastro_maquina, get_machines_from_inventory
@@ -134,7 +133,6 @@ def login_page():
 
 def dashboard_page():
     st.subheader("Dashboard - Administrativo")
-    # Exibe o horário local de Fortaleza
     agora_fortaleza = datetime.now(FORTALEZA_TZ)
     st.markdown(f"**Horário local (Fortaleza):** {agora_fortaleza.strftime('%d/%m/%Y %H:%M:%S')}")
 
@@ -145,7 +143,7 @@ def dashboard_page():
     col1.metric("Total de Chamados", total_chamados)
     col2.metric("Chamados Abertos", abertos)
     
-    # Notificações: chamados abertos com mais de 48h úteis
+    # Notificações: chamados abertos +48h úteis
     atrasados = []
     if chamados:
         for c in chamados:
@@ -307,7 +305,6 @@ def chamados_tecnicos_page():
         if st.button("Finalizar Chamado"):
             if solucao_final:
                 solucao_completa = solucao_final + (f" | Comentários: {comentarios}" if comentarios else "")
-                # Chama a função de finalizar sem passar hora_fechamento_custom
                 finalizar_chamado(chamado_id, solucao_completa, pecas_usadas=pecas_selecionadas)
             else:
                 st.error("Informe a solução para finalizar o chamado.")
@@ -325,6 +322,47 @@ def inventario_page():
             gb_inv.configure_grid_options(domLayout='normal')
             grid_options_inv = gb_inv.build()
             AgGrid(df_inv, gridOptions=grid_options_inv, height=400, fit_columns_on_grid_load=True)
+
+            # Botão para gerar relatório de inventário em PDF
+            if st.button("Gerar Relatório de Inventário em PDF"):
+                pdf = FPDF()
+                pdf.add_page()
+                # Insere o logo (ajuste x, y, w conforme necessidade)
+                pdf.image("infocustec.png", x=10, y=8, w=30)
+                pdf.ln(35)  # Move o cursor para baixo para não sobrepor o logo
+
+                pdf.set_font("Arial", "B", 16)
+                pdf.cell(0, 10, "Relatório de Inventário - Gestão de Parque de Informática", ln=True, align="C")
+                pdf.ln(10)
+
+                pdf.set_font("Arial", "", 12)
+                agora_fortaleza = datetime.now(FORTALEZA_TZ)
+                pdf.cell(0, 10, f"Data do Relatório: {agora_fortaleza.strftime('%d/%m/%Y %H:%M:%S')}", ln=True)
+                pdf.ln(5)
+
+                # Escreve os itens do inventário
+                for idx, row in df_inv.iterrows():
+                    # Monta uma linha com as principais informações
+                    linha = (
+                        f"Patrimônio: {row.get('numero_patrimonio', 'N/A')} | "
+                        f"Tipo: {row.get('tipo', 'N/A')} | "
+                        f"Marca: {row.get('marca', 'N/A')} | "
+                        f"Modelo: {row.get('modelo', 'N/A')} | "
+                        f"Localização: {row.get('localizacao', 'N/A')} | "
+                        f"Setor: {row.get('setor', 'N/A')}"
+                    )
+                    pdf.multi_cell(0, 8, linha)
+                    pdf.ln(2)
+
+                pdf_output_str = pdf.output(dest="S")  # Retorna string
+                pdf_output_bytes = pdf_output_str.encode("latin-1")  # Converte em bytes
+
+                st.download_button(
+                    label="Baixar Relatório de Inventário em PDF",
+                    data=pdf_output_bytes,
+                    file_name="relatorio_inventario.pdf",
+                    mime="application/pdf"
+                )
         else:
             st.write("Nenhum item de inventário encontrado.")
     else:
@@ -374,7 +412,6 @@ def relatorios_page():
         st.error("Data Início não pode ser maior que Data Fim")
         return
 
-    # Exibe horário local de Fortaleza
     agora_fortaleza = datetime.now(FORTALEZA_TZ)
     st.markdown(f"**Horário local (Fortaleza):** {agora_fortaleza.strftime('%d/%m/%Y %H:%M:%S')}")
 
@@ -470,6 +507,11 @@ def relatorios_page():
     if st.button("Gerar Relatório de Chamados em PDF"):
         pdf = FPDF()
         pdf.add_page()
+
+        # Insere o logo no relatório de chamados
+        pdf.image("infocustec.png", x=10, y=8, w=30)
+        pdf.ln(35)
+
         pdf.set_font("Arial", "B", 16)
         pdf.cell(0, 10, "Relatório de Chamados - Gestão de Parque de Informática", ln=True, align="C")
         pdf.ln(10)
@@ -478,24 +520,36 @@ def relatorios_page():
         if filtro_ubs:
             pdf.cell(0, 10, f"UBS: {', '.join(filtro_ubs)}", ln=True)
         pdf.ln(5)
+
         pdf.cell(0, 10, "Chamados por UBS por Mês:", ln=True)
         for idx, row in chamados_ubs_mes.iterrows():
             pdf.cell(0, 8, f"UBS: {row['ubs']} | Mês: {row['mes']} | Qtd: {row['qtd_chamados']}", ln=True)
         pdf.ln(5)
+
         pdf.cell(0, 10, "Chamados por Setor:", ln=True)
         for idx, row in chamados_ubs_setor.iterrows():
             pdf.cell(0, 8, f"UBS: {row['ubs']} | Setor: {row['setor']} | Qtd: {row['qtd_chamados']}", ln=True)
         pdf.ln(5)
+
         if "tipo_defeito" in df_period.columns:
             pdf.cell(0, 10, "Chamados por Tipo de Defeito:", ln=True)
             for idx, row in chamados_tipo.iterrows():
                 pdf.cell(0, 8, f"{row['tipo_defeito']}: {row['qtd']}", ln=True)
             pdf.ln(5)
+
         if not df_resolvidos.empty:
             pdf.cell(0, 10, "Tempo Médio de Resolução (horas úteis):", ln=True)
             pdf.cell(0, 8, f"{horas}h {minutos}m", ln=True)
-        pdf_output = pdf.output(dest="S")
-        st.download_button("Baixar Relatório de Chamados em PDF", data=pdf_output, file_name="relatorio_chamados.pdf", mime="application/pdf")
+
+        pdf_output_str = pdf.output(dest="S")  # Retorna string
+        pdf_output_bytes = pdf_output_str.encode("latin-1")  # Converte em bytes
+
+        st.download_button(
+            label="Baixar Relatório de Chamados em PDF",
+            data=pdf_output_bytes,
+            file_name="relatorio_chamados.pdf",
+            mime="application/pdf"
+        )
 
 def exportar_dados_page():
     st.subheader("Exportar Dados")
