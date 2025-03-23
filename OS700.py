@@ -39,6 +39,7 @@ if "username" not in st.session_state:
 
 # Configuração da página
 st.set_page_config(page_title="Gestão de Parque de Informática", layout="wide")
+
 logo_path = os.getenv("LOGO_PATH", "infocustec.png")
 if os.path.exists(logo_path):
     st.image(logo_path, width=300)
@@ -60,36 +61,38 @@ def exibir_chamado(chamado):
     with col2:
         st.markdown(f"**Tipo de Defeito:** {chamado.get('tipo_defeito', 'N/A')}")
         st.markdown(f"**Problema:** {chamado.get('problema', 'N/A')}")
-        st.markdown(f"**Hora de Abertura:** {chamado.get('hora_abertura', 'N/A')}")
+        st.markdown(f"**Hora de Abertura:** {chamado.get('hora_abertura', 'Em aberto')}")
         st.markdown(f"**Hora de Fechamento:** {chamado.get('hora_fechamento', 'Em aberto')}")
     if chamado.get("solucao"):
         st.markdown("### Solução")
         st.markdown(chamado["solucao"])
 
 # Definição do Menu
-if st.session_state["logged_in"]:
-    if is_admin(st.session_state["username"]):
-        menu_options = [
-            "Dashboard",
-            "Abrir Chamado",
-            "Buscar Chamado",
-            "Chamados Técnicos",
-            "Inventário",
-            "Estoque",
-            "Administração",
-            "Relatórios",
-            "Exportar Dados",
-            "Sair"
-        ]
+def build_menu():
+    if st.session_state["logged_in"]:
+        if is_admin(st.session_state["username"]):
+            return [
+                "Dashboard",
+                "Abrir Chamado",
+                "Buscar Chamado",
+                "Chamados Técnicos",
+                "Inventário",
+                "Estoque",
+                "Administração",
+                "Relatórios",
+                "Exportar Dados",
+                "Sair"
+            ]
+        else:
+            return [
+                "Abrir Chamado",
+                "Buscar Chamado",
+                "Sair"
+            ]
     else:
-        menu_options = [
-            "Abrir Chamado",
-            "Buscar Chamado",
-            "Sair"
-        ]
-else:
-    menu_options = ["Login"]
+        return ["Login"]
 
+menu_options = build_menu()
 selected = option_menu(
     menu_title=None,
     options=menu_options,
@@ -327,9 +330,10 @@ def inventario_page():
             if st.button("Gerar Relatório de Inventário em PDF"):
                 pdf = FPDF()
                 pdf.add_page()
-                # Insere o logo (ajuste x, y, w conforme necessidade)
+
+                # Logo
                 pdf.image("infocustec.png", x=10, y=8, w=30)
-                pdf.ln(35)  # Move o cursor para baixo para não sobrepor o logo
+                pdf.ln(35)
 
                 pdf.set_font("Arial", "B", 16)
                 pdf.cell(0, 10, "Relatório de Inventário - Gestão de Parque de Informática", ln=True, align="C")
@@ -340,9 +344,7 @@ def inventario_page():
                 pdf.cell(0, 10, f"Data do Relatório: {agora_fortaleza.strftime('%d/%m/%Y %H:%M:%S')}", ln=True)
                 pdf.ln(5)
 
-                # Escreve os itens do inventário
                 for idx, row in df_inv.iterrows():
-                    # Monta uma linha com as principais informações
                     linha = (
                         f"Patrimônio: {row.get('numero_patrimonio', 'N/A')} | "
                         f"Tipo: {row.get('tipo', 'N/A')} | "
@@ -354,12 +356,14 @@ def inventario_page():
                     pdf.multi_cell(0, 8, linha)
                     pdf.ln(2)
 
-                pdf_output_str = pdf.output(dest="S")  # Retorna string
-                pdf_output_bytes = pdf_output_str.encode("latin-1")  # Converte em bytes
+                pdf_output = pdf.output(dest="S")
+                # Se for string, converte; se for bytearray, não precisa
+                if isinstance(pdf_output, str):
+                    pdf_output = pdf_output.encode("latin-1")
 
                 st.download_button(
                     label="Baixar Relatório de Inventário em PDF",
-                    data=pdf_output_bytes,
+                    data=pdf_output,
                     file_name="relatorio_inventario.pdf",
                     mime="application/pdf"
                 )
@@ -504,11 +508,12 @@ def relatorios_page():
     plt.xticks(rotation=45)
     st.pyplot(fig1)
 
+    # Geração do PDF
     if st.button("Gerar Relatório de Chamados em PDF"):
         pdf = FPDF()
         pdf.add_page()
 
-        # Insere o logo no relatório de chamados
+        # Logo
         pdf.image("infocustec.png", x=10, y=8, w=30)
         pdf.ln(35)
 
@@ -541,12 +546,14 @@ def relatorios_page():
             pdf.cell(0, 10, "Tempo Médio de Resolução (horas úteis):", ln=True)
             pdf.cell(0, 8, f"{horas}h {minutos}m", ln=True)
 
-        pdf_output_str = pdf.output(dest="S")  # Retorna string
-        pdf_output_bytes = pdf_output_str.encode("latin-1")  # Converte em bytes
+        pdf_output = pdf.output(dest="S")
+        # Verifica se o retorno é string ou bytearray
+        if isinstance(pdf_output, str):
+            pdf_output = pdf_output.encode("latin-1")
 
         st.download_button(
             label="Baixar Relatório de Chamados em PDF",
-            data=pdf_output_bytes,
+            data=pdf_output,
             file_name="relatorio_chamados.pdf",
             mime="application/pdf"
         )
