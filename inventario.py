@@ -2,21 +2,21 @@
 
 import streamlit as st
 import pandas as pd
-import os
 import base64
-from datetime import datetime, date
 import pytz
+from datetime import datetime
+from st_aggrid import AgGrid, GridOptionsBuilder
 
 # Ajuste conforme seu projeto
 from supabase_client import supabase
 from setores import get_setores_list
-from ubs import get_ubs_list  # Para uso no cadastro de máquina
+from ubs import get_ubs_list
 
 FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
 
-#####################################
-# 1) Funções Básicas (originais)
-#####################################
+###########################
+# Funções Básicas
+###########################
 
 def get_machines_from_inventory():
     """
@@ -33,7 +33,7 @@ def get_machines_from_inventory():
 def edit_inventory_item(patrimonio, new_values):
     """
     Edita campos de uma máquina específica, identificada pelo patrimônio.
-    new_values é um dicionário com as colunas e valores novos.
+    new_values é um dicionário {coluna: valor}.
     """
     try:
         supabase.table("inventario").update(new_values).eq("numero_patrimonio", patrimonio).execute()
@@ -48,11 +48,11 @@ def add_machine_to_inventory(
     data_aquisicao=None, data_garantia_fim=None
 ):
     """
-    Adiciona nova máquina ao inventário, incluindo datas de aquisição e garantia.
-    (Se quiser usar sem garantia, basta não passar esses campos.)
+    Adiciona nova máquina ao inventário, incluindo data_aquisicao e data_garantia_fim
+    se quiser usar controle de garantia. Ajuste o BD conforme necessidade.
     """
     try:
-        # Verifica se já existe patrimônio
+        # Verifica se já existe esse patrimônio
         resp = supabase.table("inventario").select("numero_patrimonio").eq("numero_patrimonio", patrimonio).execute()
         if resp.data:
             st.error(f"Máquina com patrimônio {patrimonio} já existe no inventário.")
@@ -67,9 +67,8 @@ def add_machine_to_inventory(
             "localizacao": localizacao,
             "propria_locada": propria_locada,
             "setor": setor,
-            # Novos campos para controle de garantia:
-            "data_aquisicao": data_aquisicao,        # ex.: "2025-03-20"
-            "data_garantia_fim": data_garantia_fim   # ex.: "2026-03-20"
+            "data_aquisicao": data_aquisicao,
+            "data_garantia_fim": data_garantia_fim
         }
         supabase.table("inventario").insert(data).execute()
         st.success("Máquina adicionada ao inventário com sucesso!")
@@ -88,11 +87,16 @@ def delete_inventory_item(patrimonio):
         st.error("Erro ao excluir item do inventário.")
         print(f"Erro: {e}")
 
+###########################
+# Peças Usadas
+###########################
+
 def get_pecas_usadas_por_patrimonio(patrimonio):
     """
     Recupera todas as peças utilizadas associadas aos chamados técnicos da máquina.
     """
     try:
+        # Importação local para evitar dependência circular
         mod = __import__("chamados", fromlist=["get_chamados_por_patrimonio"])
         get_chamados_por_patrimonio = mod.get_chamados_por_patrimonio
     except Exception as e:
@@ -111,20 +115,20 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
         print(f"Erro: {e}")
         return []
 
-#####################################
-# 2) Função para Mostrar Inventário (original)
-#####################################
+###########################
+# Mostrar Inventário (Exemplo Original)
+###########################
 
 def show_inventory_list():
     """
-    Exibe lista de máquinas com opção de editar, excluir e ver histórico (chamados e peças).
+    Lista o inventário com opção de editar, excluir e ver histórico (chamados e peças).
     """
-    st.subheader("Inventário")
+    st.subheader("Inventário - Lista Original")
     machines = get_machines_from_inventory()
     if machines:
         df = pd.DataFrame(machines)
         st.dataframe(df)
-        
+
         patrimonio_options = df["numero_patrimonio"].unique().tolist()
         selected_patrimonio = st.selectbox("Selecione o patrimônio para visualizar detalhes", patrimonio_options)
         if selected_patrimonio:
@@ -137,9 +141,12 @@ def show_inventory_list():
                     modelo = st.text_input("Modelo", value=item.get("modelo", ""))
 
                     status_options = ["Ativo", "Em Manutencao", "Inativo"]
-                    status_index = status_options.index(item.get("status")) if item.get("status") in status_options else 0
+                    if item.get("status") in status_options:
+                        status_index = status_options.index(item.get("status"))
+                    else:
+                        status_index = 0
                     status = st.selectbox("Status", status_options, index=status_index)
-                    
+
                     localizacao = st.text_input("Localização", value=item.get("localizacao", ""))
                     
                     setores_list = get_setores_list()
@@ -148,20 +155,13 @@ def show_inventory_list():
                     else:
                         setor_index = 0
                     setor = st.selectbox("Setor", setores_list, index=setor_index)
-                    
+
                     propria_options = ["Propria", "Locada"]
                     if item.get("propria_locada") in propria_options:
                         propria_index = propria_options.index(item.get("propria_locada"))
                     else:
                         propria_index = 0
                     propria_locada = st.selectbox("Propria/Locada", propria_options, index=propria_index)
-                    
-                    # Campos de garantia (se já existirem no BD)
-                    data_aquisicao_str = item.get("data_aquisicao") or ""
-                    data_garantia_str = item.get("data_garantia_fim") or ""
-
-                    data_aquisicao = st.text_input("Data de Aquisição (YYYY-MM-DD)", value=data_aquisicao_str)
-                    data_garantia_fim = st.text_input("Data de Fim de Garantia (YYYY-MM-DD)", value=data_garantia_str)
 
                     submit = st.form_submit_button("Atualizar Item")
                     if submit:
@@ -172,9 +172,7 @@ def show_inventory_list():
                             "status": status,
                             "localizacao": localizacao,
                             "setor": setor,
-                            "propria_locada": propria_locada,
-                            "data_aquisicao": data_aquisicao if data_aquisicao else None,
-                            "data_garantia_fim": data_garantia_fim if data_garantia_fim else None
+                            "propria_locada": propria_locada
                         }
                         edit_inventory_item(selected_patrimonio, new_values)
             
@@ -196,7 +194,7 @@ def show_inventory_list():
                     st.dataframe(pd.DataFrame(chamados))
                 else:
                     st.write("Nenhum chamado técnico encontrado para este item.")
-                
+
                 st.markdown("**Peças Utilizadas:**")
                 pecas = get_pecas_usadas_por_patrimonio(selected_patrimonio)
                 if pecas:
@@ -206,49 +204,9 @@ def show_inventory_list():
     else:
         st.write("Nenhum item encontrado no inventário.")
 
-#####################################
-# 3) Cadastro de Máquina
-#####################################
-
-def cadastro_maquina():
-    """
-    Inclui data de aquisição e data de fim de garantia, se desejar.
-    """
-    st.subheader("Cadastrar Máquina no Inventário")
-    tipo = st.selectbox("Tipo de Equipamento", ["Computador", "Impressora", "Monitor", "Outro"])
-    marca = st.text_input("Marca")
-    modelo = st.text_input("Modelo")
-    numero_serie = st.text_input("Número de Série (Opcional)")
-    patrimonio = st.text_input("Número de Patrimônio")
-    status = st.selectbox("Status", ["Ativo", "Em Manutencao", "Inativo"])
-    ubs = st.selectbox("UBS", sorted(get_ubs_list()))
-    setores_list = get_setores_list()
-    setor = st.selectbox("Setor", sorted(setores_list))
-    propria_locada = st.selectbox("Própria ou Locada", ["Propria", "Locada"])
-
-    # Campos extras para data de aquisição e fim de garantia
-    data_aquisicao = st.date_input("Data de Aquisição (opcional)", value=None)
-    data_garantia = st.date_input("Data de Fim de Garantia (opcional)", value=None)
-
-    if st.button("Cadastrar Máquina"):
-        try:
-            # Converte date em string
-            str_aquisicao = data_aquisicao.strftime("%Y-%m-%d") if data_aquisicao else None
-            str_garantia = data_garantia.strftime("%Y-%m-%d") if data_garantia else None
-
-            add_machine_to_inventory(
-                tipo, marca, modelo, numero_serie, status, ubs,
-                propria_locada, patrimonio, setor,
-                data_aquisicao=str_aquisicao,
-                data_garantia_fim=str_garantia
-            )
-        except Exception as e:
-            st.error("Erro ao cadastrar máquina.")
-            st.write(e)
-
-#####################################
-# 4) Batch Update (Edição em Massa)
-#####################################
+###########################
+# Batch Update (Edição em Massa)
+###########################
 
 def batch_update_inventory(field_to_update, new_value, patrimonios):
     """
@@ -267,6 +225,7 @@ def show_inventory_list_with_batch_edit():
     """
     Lista o inventário com filtros, exportação de CSV filtrado,
     e edição em massa de um campo (status, setor, localizacao, etc.).
+    Corrige o 'if selected:' -> checamos se 'selected' é lista e seu tamanho.
     """
     st.subheader("Inventário - Edição em Massa")
 
@@ -282,7 +241,7 @@ def show_inventory_list_with_batch_edit():
 
     df = pd.DataFrame(data)
 
-    # Aplica filtro de texto (método simples)
+    # Aplica filtro de texto
     if filtro_texto:
         filtro_lower = filtro_texto.lower()
         df = df[df.apply(lambda row: filtro_lower in str(row).lower(), axis=1)]
@@ -291,8 +250,7 @@ def show_inventory_list_with_batch_edit():
     if status_filtro != "Todos":
         df = df[df["status"] == status_filtro]
 
-    # Exibe
-    from st_aggrid import AgGrid, GridOptionsBuilder
+    # Exibe via st_aggrid
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_default_column(filter=True, sortable=True)
     gb.configure_selection(selection_mode="multiple", use_checkbox=True)
@@ -305,9 +263,19 @@ def show_inventory_list_with_batch_edit():
         fit_columns_on_grid_load=True,
         update_mode="MODEL_CHANGED"
     )
-    selected = grid_response["selected_rows"]
-    if selected:
-        st.write(f"{len(selected)} itens selecionados.")
+
+    # st_aggrid retorna um dicionário com 'selected_rows'
+    selected = grid_response["selected_rows"]  # Normalmente é uma lista
+
+    # Se 'selected' é lista, checamos se tem itens
+    if isinstance(selected, list):
+        if len(selected) > 0:
+            st.write(f"{len(selected)} itens selecionados.")
+    else:
+        # Se por algum motivo 'selected' fosse DataFrame, faríamos:
+        # if not selected.empty:
+        #     st.write(f"{len(selected)} itens selecionados.")
+        pass
 
     # Exportar CSV filtrado
     if st.button("Exportar CSV Filtrado"):
@@ -320,15 +288,19 @@ def show_inventory_list_with_batch_edit():
     field = st.selectbox("Campo para atualizar", ["status", "setor", "localizacao", "propria_locada"])
     new_value = st.text_input("Novo valor para esse campo")
     if st.button("Aplicar Edição em Massa"):
-        if selected and field and new_value:
+        # Verifica se 'selected' é lista e se há itens
+        if isinstance(selected, list) and len(selected) > 0:
             patrimonios_selecionados = [row["numero_patrimonio"] for row in selected]
-            batch_update_inventory(field, new_value, patrimonios_selecionados)
+            if field and new_value:
+                batch_update_inventory(field, new_value, patrimonios_selecionados)
+            else:
+                st.warning("Selecione um campo e insira o novo valor.")
         else:
-            st.warning("Selecione ao menos um item e preencha o novo valor.")
+            st.warning("Nenhum item selecionado.")
 
-#####################################
-# 5) Dashboard do Inventário
-#####################################
+###########################
+# Dashboard do Inventário
+###########################
 
 def dashboard_inventario():
     """
@@ -356,15 +328,14 @@ def dashboard_inventario():
     ax.set_title("Distribuição de Status no Inventário")
     st.pyplot(fig)
 
-#####################################
-# 6) Gerenciar Imagens (upload/visualização)
-#####################################
+###########################
+# Gerenciar Imagens
+###########################
 
 def manage_images():
     """
-    Permite fazer upload de imagem e associar ao patrimônio.
-    Salva em base64 no campo 'image_data' da tabela 'inventario'.
-    Também permite visualizar se existir.
+    Permite fazer upload de imagem e associar ao patrimônio,
+    salvando em base64 no campo 'image_data'.
     """
     st.subheader("Gerenciar Imagens do Equipamento")
 
@@ -397,6 +368,7 @@ def manage_images():
             resp = supabase.table("inventario").select("image_data").eq("numero_patrimonio", patrimonio).execute()
             if resp.data and resp.data[0].get("image_data"):
                 encoded = resp.data[0]["image_data"]
+                import base64
                 file_content = base64.b64decode(encoded)
                 st.image(file_content, caption=f"Imagem da máquina {patrimonio}")
             else:
@@ -405,28 +377,46 @@ def manage_images():
             st.error("Erro ao buscar imagem.")
             st.write(e)
 
-#####################################
-# 7) Se rodar diretamente
-#####################################
+###########################
+# Cadastro de Máquina
+###########################
 
-if __name__ == "__main__":
-    st.title("Inventário - Módulo Completo")
+def cadastro_maquina():
+    """
+    Cadastro básico de máquina no inventário.
+    Se quiser datas de aquisição/garantia, inclua os campos aqui e no BD.
+    """
+    st.subheader("Cadastrar Máquina no Inventário")
+    tipo = st.selectbox("Tipo de Equipamento", ["Computador", "Impressora", "Monitor", "Outro"])
+    marca = st.text_input("Marca")
+    modelo = st.text_input("Modelo")
+    numero_serie = st.text_input("Número de Série (Opcional)")
+    patrimonio = st.text_input("Número de Patrimônio")
+    status = st.selectbox("Status", ["Ativo", "Em Manutencao", "Inativo"])
+    ubs = st.selectbox("Localização (UBS)", sorted(get_ubs_list()))
+    setores_list = get_setores_list()
+    setor = st.selectbox("Setor", sorted(setores_list))
+    propria_locada = st.selectbox("Própria ou Locada", ["Propria", "Locada"])
 
-    menu_opcao = st.radio("Escolha a ação:", [
-        "Listar Inventário (original)",
-        "Cadastrar Máquina",
-        "Listar/Edit em Massa",
-        "Dashboard Inventário",
-        "Gerenciar Imagens"
-    ])
-
-    if menu_opcao == "Listar Inventário (original)":
-        show_inventory_list()
-    elif menu_opcao == "Cadastrar Máquina":
-        cadastro_maquina()
-    elif menu_opcao == "Listar/Edit em Massa":
-        show_inventory_list_with_batch_edit()
-    elif menu_opcao == "Dashboard Inventário":
-        dashboard_inventario()
-    elif menu_opcao == "Gerenciar Imagens":
-        manage_images()
+    if st.button("Cadastrar Máquina"):
+        try:
+            resp = supabase.table("inventario").select("numero_patrimonio").eq("numero_patrimonio", patrimonio).execute()
+            if resp.data:
+                st.error("Máquina com este patrimônio já existe.")
+            else:
+                data = {
+                    "numero_patrimonio": patrimonio,
+                    "tipo": tipo,
+                    "marca": marca,
+                    "modelo": modelo,
+                    "numero_serie": numero_serie or None,
+                    "status": status,
+                    "localizacao": ubs,
+                    "propria_locada": propria_locada,
+                    "setor": setor
+                }
+                supabase.table("inventario").insert(data).execute()
+                st.success("Máquina cadastrada com sucesso!")
+        except Exception as e:
+            st.error("Erro ao cadastrar máquina.")
+            st.write(e)
