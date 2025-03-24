@@ -24,16 +24,20 @@ from chamados import (
     calculate_working_hours
 )
 from inventario import (
-    show_inventory_list,  # Já existente
-    cadastro_maquina,
+    show_inventory_list,       # Listar Inventário (original)
+    cadastro_maquina,          # Cadastrar Máquina
     get_machines_from_inventory,
-    get_pecas_usadas_por_patrimonio  # Precisamos se quisermos exibir as peças
+    get_pecas_usadas_por_patrimonio,
+    # Estas 3 funções abaixo precisam existir em inventario.py
+    # show_inventory_list_with_batch_edit,
+    # dashboard_inventario,
+    # manage_images
 )
 from ubs import get_ubs_list
 from setores import get_setores_list
 from estoque import manage_estoque, get_estoque
 
-# Configuração de logging
+# Configuração do logging
 logging.basicConfig(level=logging.INFO)
 
 # Inicialização de sessão
@@ -45,6 +49,7 @@ if "username" not in st.session_state:
 # Configuração da página
 st.set_page_config(page_title="Gestão de Parque de Informática", layout="wide")
 
+# Verifica se existe logotipo no caminho
 logo_path = os.getenv("LOGO_PATH", "infocustec.png")
 if os.path.exists(logo_path):
     st.image(logo_path, width=300)
@@ -72,6 +77,7 @@ def exibir_chamado(chamado):
         st.markdown("### Solução")
         st.markdown(chamado["solucao"])
 
+# Função para construir o menu principal
 def build_menu():
     if st.session_state["logged_in"]:
         if is_admin(st.session_state["username"]):
@@ -97,6 +103,8 @@ def build_menu():
         return ["Login"]
 
 menu_options = build_menu()
+
+# Cria o menu horizontal
 selected = option_menu(
     menu_title=None,
     options=menu_options,
@@ -122,6 +130,9 @@ selected = option_menu(
     }
 )
 
+####################################
+# 1) Página de Login
+####################################
 def login_page():
     st.subheader("Login")
     username = st.text_input("Usuário")
@@ -136,6 +147,9 @@ def login_page():
         else:
             st.error("Usuário ou senha incorretos.")
 
+####################################
+# 2) Página de Dashboard
+####################################
 def dashboard_page():
     st.subheader("Dashboard - Administrativo")
     agora_fortaleza = datetime.now(FORTALEZA_TZ)
@@ -148,6 +162,7 @@ def dashboard_page():
     col1.metric("Total de Chamados", total_chamados)
     col2.metric("Chamados Abertos", abertos)
     
+    # Identifica chamados atrasados (48h úteis)
     atrasados = []
     if chamados:
         for c in chamados:
@@ -163,6 +178,7 @@ def dashboard_page():
     if atrasados:
         st.warning(f"Atenção: {len(atrasados)} chamados abertos com mais de 48h úteis!")
     
+    # Gráfico de tendência
     if chamados:
         df = pd.DataFrame(chamados)
         df["hora_abertura_dt"] = pd.to_datetime(df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
@@ -178,6 +194,9 @@ def dashboard_page():
     else:
         st.write("Nenhum chamado registrado.")
 
+####################################
+# 3) Página de Abrir Chamado
+####################################
 def abrir_chamado_page():
     st.subheader("Abrir Chamado Técnico")
     patrimonio = st.text_input("Número de Patrimônio (opcional)")
@@ -186,6 +205,8 @@ def abrir_chamado_page():
     machine_type = None
     ubs_selecionada = None
     setor = None
+
+    # Verifica se há patrimônio e se existe no inventário
     if patrimonio:
         machine_info = buscar_no_inventario_por_patrimonio(patrimonio)
         if machine_info:
@@ -198,9 +219,12 @@ def abrir_chamado_page():
             st.error("Patrimônio não encontrado. Cadastre a máquina antes.")
             st.stop()
     else:
+        # Seleciona manualmente a UBS, setor, tipo
         ubs_selecionada = st.selectbox("UBS", get_ubs_list())
         setor = st.selectbox("Setor", get_setores_list())
         machine_type = st.selectbox("Tipo de Máquina", ["Computador", "Impressora", "Outro"])
+
+    # Lista de possíveis defeitos conforme o tipo de máquina
     if machine_type == "Computador":
         defect_options = [
             "Computador não liga", "Computador lento", "Tela azul", "Sistema travando",
@@ -215,8 +239,10 @@ def abrir_chamado_page():
         ]
     else:
         defect_options = ["Solicitação de suporte geral", "Outros tipos de defeito"]
+
     tipo_defeito = st.selectbox("Tipo de Defeito/Solicitação", defect_options)
     problema = st.text_area("Descreva o problema ou solicitação")
+
     if st.button("Abrir Chamado"):
         agendamento = data_agendada.strftime('%d/%m/%Y') if data_agendada else None
         protocolo = add_chamado(
@@ -232,6 +258,9 @@ def abrir_chamado_page():
         else:
             st.error("Erro ao abrir chamado.")
 
+####################################
+# 4) Página de Buscar Chamado
+####################################
 def buscar_chamado_page():
     st.subheader("Buscar Chamado")
     protocolo = st.text_input("Informe o número de protocolo do chamado")
@@ -246,14 +275,19 @@ def buscar_chamado_page():
         else:
             st.warning("Informe um protocolo.")
 
+####################################
+# 5) Página de Chamados Técnicos
+####################################
 def chamados_tecnicos_page():
     st.subheader("Chamados Técnicos")
     chamados = list_chamados()
     if not chamados:
         st.write("Nenhum chamado técnico encontrado.")
         return
+
     df = pd.DataFrame(chamados)
 
+    # Calcula tempo útil para cada chamado
     def calcula_tempo(row):
         if pd.notnull(row.get("hora_fechamento")):
             try:
@@ -261,21 +295,29 @@ def chamados_tecnicos_page():
                 fechamento = datetime.strptime(row["hora_fechamento"], '%d/%m/%Y %H:%M:%S')
                 tempo_util = calculate_working_hours(abertura, fechamento)
                 return str(tempo_util)
-            except Exception:
+            except:
                 return "Erro"
         else:
             return "Em aberto"
 
     df["Tempo Util"] = df.apply(calcula_tempo, axis=1)
 
+    # Configura AgGrid
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_default_column(filter=True, sortable=True)
     gb.configure_pagination(paginationAutoPageSize=True)
+    # Exemplo: domLayout='autoHeight'
     gb.configure_grid_options(domLayout='autoHeight')
     grid_options = gb.build()
 
-    AgGrid(df, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
+    AgGrid(
+        df,
+        gridOptions=grid_options,
+        height=400,
+        fit_columns_on_grid_load=True
+    )
     
+    # Finalizar Chamado
     df_aberto = df[df["hora_fechamento"].isnull()]
     if df_aberto.empty:
         st.write("Não há chamados abertos para finalizar.")
@@ -312,10 +354,31 @@ def chamados_tecnicos_page():
             else:
                 st.error("Informe a solução para finalizar o chamado.")
 
+####################################
+# 6) Página de Inventário (NOVO MENU)
+####################################
 def inventario_page():
+    """
+    Agora adicionamos 5 sub-opções:
+      1) Listar Inventário (original)
+      2) Cadastrar Máquina
+      3) Listar/Edit em Massa
+      4) Dashboard Inventário
+      5) Gerenciar Imagens
+    É necessário que as funções show_inventory_list_with_batch_edit, 
+    dashboard_inventario e manage_images existam no inventario.py
+    """
     st.subheader("Inventário")
-    opcao = st.radio("Selecione uma opção:", ["Listar Inventário", "Cadastrar Máquina"])
-    if opcao == "Listar Inventário":
+    menu_inventario = st.radio("Selecione uma opção:", [
+        "Listar Inventário (original)",
+        "Cadastrar Máquina",
+        "Listar/Edit em Massa",
+        "Dashboard Inventário",
+        "Gerenciar Imagens"
+    ])
+
+    if menu_inventario == "Listar Inventário (original)":
+        # Lógica original (ou pode chamar show_inventory_list())
         inventario_data = get_machines_from_inventory()
         if inventario_data:
             df_inv = pd.DataFrame(inventario_data)
@@ -326,7 +389,7 @@ def inventario_page():
             grid_options_inv = gb_inv.build()
             AgGrid(df_inv, gridOptions=grid_options_inv, height=400, fit_columns_on_grid_load=True)
 
-            # Botão para gerar relatório de inventário em PDF
+            # Exemplo de relatório em PDF do inventário
             if st.button("Gerar Relatório de Inventário em PDF"):
                 pdf = FPDF()
                 pdf.add_page()
@@ -357,7 +420,6 @@ def inventario_page():
                     pdf.ln(2)
 
                 pdf_output = pdf.output(dest="S")
-                # Se for string, converte; se for bytearray, não precisa
                 if isinstance(pdf_output, str):
                     pdf_output = pdf_output.encode("latin-1")
 
@@ -367,51 +429,40 @@ def inventario_page():
                     file_name="relatorio_inventario.pdf",
                     mime="application/pdf"
                 )
-
-            # Novo: Botão ou Expander para histórico da máquina
-            st.markdown("---")
-            st.subheader("Histórico da Máquina Selecionada")
-            # Seleciona o patrimônio
-            patrimonio_options = df_inv["numero_patrimonio"].unique().tolist()
-            selected_patrimonio = st.selectbox("Selecione o Patrimônio para ver o histórico", patrimonio_options)
-
-            if selected_patrimonio:
-                with st.expander("Histórico Completo da Máquina"):
-                    st.markdown("**Chamados Técnicos:**")
-                    # Importa a função para buscar chamados por patrimônio
-                    try:
-                        mod = __import__("chamados", fromlist=["get_chamados_por_patrimonio"])
-                        get_chamados_por_patrimonio = mod.get_chamados_por_patrimonio
-                    except Exception as e:
-                        st.error("Erro ao importar função de chamados.")
-                        print(f"Erro: {e}")
-                        get_chamados_por_patrimonio = lambda x: []
-
-                    chamados = get_chamados_por_patrimonio(selected_patrimonio)
-                    if chamados:
-                        st.dataframe(pd.DataFrame(chamados))
-                    else:
-                        st.write("Nenhum chamado técnico encontrado para este item.")
-
-                    st.markdown("**Peças Utilizadas:**")
-                    from inventario import get_pecas_usadas_por_patrimonio
-                    pecas = get_pecas_usadas_por_patrimonio(selected_patrimonio)
-                    if pecas:
-                        st.dataframe(pd.DataFrame(pecas))
-                    else:
-                        st.write("Nenhuma peça utilizada encontrada para este item.")
         else:
             st.write("Nenhum item de inventário encontrado.")
-    else:
+
+    elif menu_inventario == "Cadastrar Máquina":
         cadastro_maquina()
 
+    elif menu_inventario == "Listar/Edit em Massa":
+        from inventario import show_inventory_list_with_batch_edit
+        show_inventory_list_with_batch_edit()
+
+    elif menu_inventario == "Dashboard Inventário":
+        from inventario import dashboard_inventario
+        dashboard_inventario()
+
+    elif menu_inventario == "Gerenciar Imagens":
+        from inventario import manage_images
+        manage_images()
+
+####################################
+# 7) Página de Estoque
+####################################
 def estoque_page():
     manage_estoque()
 
+####################################
+# 8) Página de Administração
+####################################
 def administracao_page():
     st.subheader("Administração")
     admin_option = st.selectbox("Opções de Administração", [
-        "Cadastro de Usuário", "Gerenciar UBSs", "Gerenciar Setores", "Lista de Usuários"
+        "Cadastro de Usuário",
+        "Gerenciar UBSs",
+        "Gerenciar Setores",
+        "Lista de Usuários"
     ])
     if admin_option == "Cadastro de Usuário":
         novo_user = st.text_input("Novo Usuário")
@@ -435,6 +486,9 @@ def administracao_page():
         else:
             st.write("Nenhum usuário cadastrado.")
 
+####################################
+# 9) Página de Relatórios
+####################################
 def relatorios_page():
     st.subheader("Relatórios Completos - Estatísticas")
     st.markdown("### Filtros para Chamados")
@@ -500,6 +554,7 @@ def relatorios_page():
     else:
         st.write("Nenhum chamado finalizado no período para calcular tempo médio de resolução.")
 
+    # Exemplo: Chamados por tipo de defeito, etc.
     if "tipo_defeito" in df_period.columns:
         chamados_tipo = df_period.groupby("tipo_defeito").size().reset_index(name="qtd")
         st.markdown("#### Chamados por Tipo de Defeito")
@@ -567,8 +622,13 @@ def relatorios_page():
                 pdf.cell(0, 8, f"{row['tipo_defeito']}: {row['qtd']}", ln=True)
             pdf.ln(5)
 
-        if not df_resolvidos.empty:
+        # Se houve chamados finalizados, exibimos o tempo médio
+        df_finalizados = df_period.dropna(subset=["tempo_resolucao_seg"])
+        if not df_finalizados.empty:
             pdf.cell(0, 10, "Tempo Médio de Resolução (horas úteis):", ln=True)
+            media_seg = df_finalizados["tempo_resolucao_seg"].mean()
+            horas = int(media_seg // 3600)
+            minutos = int((media_seg % 3600) // 60)
             pdf.cell(0, 8, f"{horas}h {minutos}m", ln=True)
 
         pdf_output = pdf.output(dest="S")
@@ -582,6 +642,9 @@ def relatorios_page():
             mime="application/pdf"
         )
 
+####################################
+# 10) Página de Exportar Dados
+####################################
 def exportar_dados_page():
     st.subheader("Exportar Dados")
     st.markdown("### Exportar Chamados em CSV")
@@ -602,26 +665,32 @@ def exportar_dados_page():
     else:
         st.write("Nenhum item de inventário para exportar.")
 
+####################################
+# 11) Página de Sair
+####################################
 def sair_page():
     st.session_state["logged_in"] = False
     st.session_state["username"] = ""
     st.success("Você saiu.")
 
-# Mapeamento das páginas
+####################################
+# Mapeamento das Páginas
+####################################
 pages = {
     "Login": login_page,
     "Dashboard": dashboard_page,
     "Abrir Chamado": abrir_chamado_page,
     "Buscar Chamado": buscar_chamado_page,
     "Chamados Técnicos": chamados_tecnicos_page,
-    "Inventário": inventario_page,
-    "Estoque": estoque_page,
+    "Inventário": inventario_page,  # Ajustado para ter sub-opções
+    "Estoque": manage_estoque,
     "Administração": administracao_page,
     "Relatórios": relatorios_page,
     "Exportar Dados": exportar_dados_page,
     "Sair": sair_page,
 }
 
+# Roteamento do menu
 if selected in pages:
     pages[selected]()
 else:
