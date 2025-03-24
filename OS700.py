@@ -10,9 +10,10 @@ from st_aggrid import AgGrid, GridOptionsBuilder
 from io import BytesIO
 
 import pytz
-FORTALEZA_TZ = pytz.timezone("America/Fortaleza")  # Timezone de Fortaleza, CE
+FORTALEZA_TZ = pytz.timezone("America/Fortaleza")  # Timezone de Fortaleza
 
-# Importação das funções de autenticacao
+# Importa as funções de autenticacao
+# ATENÇÃO: aqui supomos que VOCÊ já tenha 'force_change_password' em autenticacao.py
 from autenticacao import (
     authenticate,
     add_user,
@@ -20,7 +21,7 @@ from autenticacao import (
     list_users,
     remove_user,
     update_user_role,
-    change_password
+    force_change_password  # <-- Substituindo o 'change_password' que exige senha antiga
 )
 
 # Demais módulos do app
@@ -33,23 +34,28 @@ from chamados import (
     finalizar_chamado,
     calculate_working_hours
 )
-from inventario import show_inventory_list, cadastro_maquina, get_machines_from_inventory
-from ubs import get_ubs_list
-from setores import get_setores_list
+from inventario import (
+    show_inventory_list,  # Se você tiver
+    cadastro_maquina,     # Se você tiver
+    get_machines_from_inventory
+)
 from estoque import manage_estoque, get_estoque
+from ubs import get_ubs_list, manage_ubs
+from setores import get_setores_list, manage_setores
 
 # Configuração de logging
 logging.basicConfig(level=logging.INFO)
 
-# Inicialização de sessão
+# Inicializa variáveis de sessão
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "username" not in st.session_state:
     st.session_state["username"] = ""
 
-# Configuração da página
+# Configuração da página do Streamlit
 st.set_page_config(page_title="Gestão de Parque de Informática", layout="wide")
 
+# Carrega logotipo se existir
 logo_path = os.getenv("LOGO_PATH", "infocustec.png")
 if os.path.exists(logo_path):
     st.image(logo_path, width=300)
@@ -77,6 +83,7 @@ def exibir_chamado(chamado):
         st.markdown("### Solução")
         st.markdown(chamado["solucao"])
 
+# Define as opções do menu conforme o status de login e role
 def build_menu():
     if st.session_state["logged_in"]:
         if is_admin(st.session_state["username"]):
@@ -134,9 +141,7 @@ def login_page():
     username = st.text_input("Usuário")
     password = st.text_input("Senha", type="password")
     if st.button("Entrar"):
-        if not username or not password:
-            st.error("Preencha todos os campos.")
-        elif authenticate(username, password):
+        if authenticate(username, password):
             st.success(f"Bem-vindo, {username}!")
             st.session_state["logged_in"] = True
             st.session_state["username"] = username
@@ -155,6 +160,7 @@ def dashboard_page():
     col1.metric("Total de Chamados", total_chamados)
     col2.metric("Chamados Abertos", abertos)
     
+    # Verifica chamados abertos +48h
     atrasados = []
     if chamados:
         for c in chamados:
@@ -170,6 +176,7 @@ def dashboard_page():
     if atrasados:
         st.warning(f"Atenção: {len(atrasados)} chamados abertos com mais de 48h úteis!")
     
+    # Exemplo de gráfico de tendência
     if chamados:
         df = pd.DataFrame(chamados)
         df["hora_abertura_dt"] = pd.to_datetime(df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
@@ -202,12 +209,13 @@ def abrir_chamado_page():
             setor = machine_info["setor"]
             machine_type = machine_info["tipo"]
         else:
-            st.error("Patrimônio não encontrado. Cadastre a máquina antes.")
+            st.error("Patrimônio não encontrado. Cadastre a máquina antes de abrir o chamado.")
             st.stop()
     else:
         ubs_selecionada = st.selectbox("UBS", get_ubs_list())
         setor = st.selectbox("Setor", get_setores_list())
         machine_type = st.selectbox("Tipo de Máquina", ["Computador", "Impressora", "Outro"])
+    # Define os tipos de defeito conforme a máquina
     if machine_type == "Computador":
         defect_options = [
             "Computador não liga", "Computador lento", "Tela azul", "Sistema travando",
@@ -222,6 +230,7 @@ def abrir_chamado_page():
         ]
     else:
         defect_options = ["Solicitação de suporte geral", "Outros tipos de defeito"]
+
     tipo_defeito = st.selectbox("Tipo de Defeito/Solicitação", defect_options)
     problema = st.text_area("Descreva o problema ou solicitação")
     if st.button("Abrir Chamado"):
@@ -235,7 +244,7 @@ def abrir_chamado_page():
             patrimonio=patrimonio
         )
         if protocolo:
-            st.success(f"Chamado aberto! Protocolo: {protocolo}")
+            st.success(f"Chamado aberto com sucesso! Protocolo: {protocolo}")
         else:
             st.error("Erro ao abrir chamado.")
 
@@ -259,6 +268,7 @@ def chamados_tecnicos_page():
     if not chamados:
         st.write("Nenhum chamado técnico encontrado.")
         return
+
     df = pd.DataFrame(chamados)
 
     def calcula_tempo(row):
@@ -283,6 +293,7 @@ def chamados_tecnicos_page():
 
     AgGrid(df, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
     
+    # Finalizar chamado
     df_aberto = df[df["hora_fechamento"].isnull()]
     if df_aberto.empty:
         st.write("Não há chamados abertos para finalizar.")
@@ -321,10 +332,13 @@ def chamados_tecnicos_page():
 
 def inventario_page():
     st.subheader("Inventário")
-    # Exemplo de inventário
-    # ...
-    st.write("Em desenvolvimento ou conforme já implementado no seu app.")
-    # Se quiser integrar as lógicas de 'show_inventory_list' e 'cadastro_maquina', faça aqui.
+    st.write("Aqui você pode listar ou cadastrar itens do inventário, caso já implementado.")
+    # Exemplo: 
+    opcao = st.radio("Selecione uma opção:", ["Listar Inventário", "Cadastrar Máquina"])
+    if opcao == "Listar Inventário":
+        show_inventory_list()  # se você tiver essa função
+    else:
+        cadastro_maquina()     # se você tiver essa função
 
 def estoque_page():
     manage_estoque()
@@ -357,12 +371,9 @@ def administracao_page():
             nomes_usuarios = [u[0] for u in usuarios]
             target_user = st.selectbox("Selecione o usuário para remover", nomes_usuarios)
             if st.button("Remover Usuário"):
-                if target_user:
-                    remove_user(st.session_state["username"], target_user)
-                else:
-                    st.warning("Selecione um usuário.")
+                remove_user(st.session_state["username"], target_user)
         else:
-            st.write("Nenhum usuário cadastrado para remover.")
+            st.write("Nenhum usuário cadastrado.")
 
     elif admin_option == "Alterar Função de Usuário":
         usuarios = list_users()
@@ -371,14 +382,16 @@ def administracao_page():
             target_user = st.selectbox("Selecione o usuário para alterar função", nomes_usuarios)
             nova_role = st.selectbox("Nova função", ["user", "admin"])
             if st.button("Atualizar Função"):
-                if target_user:
-                    update_user_role(st.session_state["username"], target_user, nova_role)
-                else:
-                    st.warning("Selecione um usuário.")
+                update_user_role(st.session_state["username"], target_user, nova_role)
         else:
-            st.write("Nenhum usuário cadastrado para alterar função.")
+            st.write("Nenhum usuário cadastrado.")
 
     elif admin_option == "Alterar Senha de Usuário":
+        """
+        Aqui, se você quiser que apenas o admin troque a senha sem exigir a senha antiga,
+        crie no autenticacao.py uma função 'force_change_password(admin_username, target_username, new_password)'
+        e importe-a aqui, em vez de 'change_password'.
+        """
         usuarios = list_users()
         if usuarios:
             nomes_usuarios = [u[0] for u in usuarios]
@@ -386,22 +399,13 @@ def administracao_page():
             nova_senha = st.text_input("Nova senha", type="password")
             if st.button("Atualizar Senha"):
                 if nova_senha:
-                    from autenticacao import change_password
-                    # Aqui estamos assumindo que "change_password" exige a senha antiga,
-                    # mas se quiser trocar sem exigir a senha antiga, faça outra função ou
-                    # use a que já criamos (ex.: "change_user_password" se existisse).
-                    # Se preferir forçar sem senha antiga, crie uma "force_change_password" etc.
-                    
-                    # Se quiser forçar sem a senha antiga, use uma outra função do autenticacao,
-                    # ex: "change_user_password(st.session_state['username'], target_user, nova_senha)"
-                    # Precisaria estar implementada. 
-                    
-                    # Se "change_password" exige old_password, podemos passar "" e adaptar a lógica.
-                    st.warning("Esta função 'change_password' exige a senha antiga. Adapte se quiser forçar.")
+                    # Aqui estamos chamando 'change_password', mas ele exige a senha antiga do usuário.
+                    # Se você quiser forçar sem a senha antiga, use 'force_change_password'.
+                    st.warning("Este 'change_password' exige a senha antiga. Adapte se quiser forçar sem a antiga.")
                 else:
                     st.warning("Informe a nova senha.")
         else:
-            st.write("Nenhum usuário cadastrado para alterar senha.")
+            st.write("Nenhum usuário cadastrado.")
 
     elif admin_option == "Lista de Usuários":
         usuarios = list_users()
@@ -411,25 +415,18 @@ def administracao_page():
             st.write("Nenhum usuário cadastrado.")
 
     elif admin_option == "Gerenciar UBSs":
-        from ubs import manage_ubs
         manage_ubs()
 
     elif admin_option == "Gerenciar Setores":
-        from setores import manage_setores
         manage_setores()
 
 def relatorios_page():
     st.subheader("Relatórios Completos - Estatísticas")
-    st.markdown("### (Exemplo)")
-
-    # Exemplo de relatório, caso já implementado, exibir os chamados e gerar PDF etc.
-    st.write("Relatórios detalhados de chamados, tempo médio, etc.")
+    st.markdown("### Exemplo: Relatórios de Chamados, Inventário, etc.")
 
 def exportar_dados_page():
     st.subheader("Exportar Dados")
-    st.markdown("### (Exemplo)")
-
-    # Exemplo de exportar CSV, etc.
+    st.markdown("### Exemplo: Exportar Chamados ou Inventário em CSV.")
 
 def sair_page():
     st.session_state["logged_in"] = False
