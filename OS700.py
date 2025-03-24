@@ -23,7 +23,12 @@ from chamados import (
     finalizar_chamado,
     calculate_working_hours
 )
-from inventario import show_inventory_list, cadastro_maquina, get_machines_from_inventory
+from inventario import (
+    show_inventory_list,  # Já existente
+    cadastro_maquina,
+    get_machines_from_inventory,
+    get_pecas_usadas_por_patrimonio  # Precisamos se quisermos exibir as peças
+)
 from ubs import get_ubs_list
 from setores import get_setores_list
 from estoque import manage_estoque, get_estoque
@@ -67,7 +72,6 @@ def exibir_chamado(chamado):
         st.markdown("### Solução")
         st.markdown(chamado["solucao"])
 
-# Definição do Menu
 def build_menu():
     if st.session_state["logged_in"]:
         if is_admin(st.session_state["username"]):
@@ -118,8 +122,6 @@ selected = option_menu(
     }
 )
 
-# --- Funções das Páginas ---
-
 def login_page():
     st.subheader("Login")
     username = st.text_input("Usuário")
@@ -146,7 +148,6 @@ def dashboard_page():
     col1.metric("Total de Chamados", total_chamados)
     col2.metric("Chamados Abertos", abertos)
     
-    # Notificações: chamados abertos +48h úteis
     atrasados = []
     if chamados:
         for c in chamados:
@@ -157,12 +158,11 @@ def dashboard_page():
                     tempo_util = calculate_working_hours(abertura, agora_local)
                     if tempo_util > timedelta(hours=48):
                         atrasados.append(c)
-                except Exception:
+                except:
                     pass
     if atrasados:
         st.warning(f"Atenção: {len(atrasados)} chamados abertos com mais de 48h úteis!")
     
-    # Gráfico de tendência
     if chamados:
         df = pd.DataFrame(chamados)
         df["hora_abertura_dt"] = pd.to_datetime(df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
@@ -228,7 +228,7 @@ def abrir_chamado_page():
             patrimonio=patrimonio
         )
         if protocolo:
-            st.success(f"Chamado aberto! Protocolo: {protocolo}")
+            st.success(f"Chamado aberto com sucesso! Protocolo: {protocolo}")
         else:
             st.error("Erro ao abrir chamado.")
 
@@ -367,6 +367,39 @@ def inventario_page():
                     file_name="relatorio_inventario.pdf",
                     mime="application/pdf"
                 )
+
+            # Novo: Botão ou Expander para histórico da máquina
+            st.markdown("---")
+            st.subheader("Histórico da Máquina Selecionada")
+            # Seleciona o patrimônio
+            patrimonio_options = df_inv["numero_patrimonio"].unique().tolist()
+            selected_patrimonio = st.selectbox("Selecione o Patrimônio para ver o histórico", patrimonio_options)
+
+            if selected_patrimonio:
+                with st.expander("Histórico Completo da Máquina"):
+                    st.markdown("**Chamados Técnicos:**")
+                    # Importa a função para buscar chamados por patrimônio
+                    try:
+                        mod = __import__("chamados", fromlist=["get_chamados_por_patrimonio"])
+                        get_chamados_por_patrimonio = mod.get_chamados_por_patrimonio
+                    except Exception as e:
+                        st.error("Erro ao importar função de chamados.")
+                        print(f"Erro: {e}")
+                        get_chamados_por_patrimonio = lambda x: []
+
+                    chamados = get_chamados_por_patrimonio(selected_patrimonio)
+                    if chamados:
+                        st.dataframe(pd.DataFrame(chamados))
+                    else:
+                        st.write("Nenhum chamado técnico encontrado para este item.")
+
+                    st.markdown("**Peças Utilizadas:**")
+                    from inventario import get_pecas_usadas_por_patrimonio
+                    pecas = get_pecas_usadas_por_patrimonio(selected_patrimonio)
+                    if pecas:
+                        st.dataframe(pd.DataFrame(pecas))
+                    else:
+                        st.write("Nenhuma peça utilizada encontrada para este item.")
         else:
             st.write("Nenhum item de inventário encontrado.")
     else:
@@ -441,13 +474,11 @@ def relatorios_page():
     
     df_period["mes"] = df_period["hora_abertura_dt"].dt.to_period("M").astype(str)
 
-    # 1) Volume de Chamados (Abertos vs. Fechados)
     chamados_abertos = df_period[df_period["hora_fechamento"].isnull()].shape[0]
     chamados_fechados = df_period[df_period["hora_fechamento"].notnull()].shape[0]
     st.markdown(f"**Chamados Abertos (período):** {chamados_abertos}")
     st.markdown(f"**Chamados Fechados (período):** {chamados_fechados}")
 
-    # 2) Tempo Médio de Resolução (TMR)
     def tempo_resolucao(row):
         if pd.notnull(row["hora_fechamento"]):
             try:
@@ -469,7 +500,6 @@ def relatorios_page():
     else:
         st.write("Nenhum chamado finalizado no período para calcular tempo médio de resolução.")
 
-    # 3) Chamados por Tipo de Defeito
     if "tipo_defeito" in df_period.columns:
         chamados_tipo = df_period.groupby("tipo_defeito").size().reset_index(name="qtd")
         st.markdown("#### Chamados por Tipo de Defeito")
@@ -482,12 +512,10 @@ def relatorios_page():
         plt.xticks(rotation=45, ha="right")
         st.pyplot(fig_tipo)
 
-    # 4) Chamados por UBS e Setor
     chamados_ubs_setor = df_period.groupby(["ubs", "setor"]).size().reset_index(name="qtd_chamados")
     st.markdown("#### Chamados por UBS e Setor")
     st.dataframe(chamados_ubs_setor)
 
-    # 5) Distribuição de Chamados por Dia da Semana
     if not df_period.empty:
         df_period["dia_semana"] = df_period["hora_abertura_dt"].dt.day_name()
         chamados_por_dia = df_period.groupby("dia_semana").size().reset_index(name="qtd")
@@ -508,12 +536,9 @@ def relatorios_page():
     plt.xticks(rotation=45)
     st.pyplot(fig1)
 
-    # Geração do PDF
     if st.button("Gerar Relatório de Chamados em PDF"):
         pdf = FPDF()
         pdf.add_page()
-
-        # Logo
         pdf.image("infocustec.png", x=10, y=8, w=30)
         pdf.ln(35)
 
@@ -547,7 +572,6 @@ def relatorios_page():
             pdf.cell(0, 8, f"{horas}h {minutos}m", ln=True)
 
         pdf_output = pdf.output(dest="S")
-        # Verifica se o retorno é string ou bytearray
         if isinstance(pdf_output, str):
             pdf_output = pdf_output.encode("latin-1")
 
