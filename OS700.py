@@ -271,7 +271,7 @@ def chamados_tecnicos_page():
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_default_column(filter=True, sortable=True)
     gb.configure_pagination(paginationAutoPageSize=True)
-    gb.configure_grid_options(domLayout='normal')
+    gb.configure_grid_options(domLayout='autoHeight')
     grid_options = gb.build()
 
     AgGrid(df, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
