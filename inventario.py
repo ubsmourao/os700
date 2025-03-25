@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-import base64  # Import para manipular a imagem em base64
+import base64  # Para manipular a imagem em base64
 import pytz
 from datetime import datetime
 from st_aggrid import AgGrid, GridOptionsBuilder
@@ -117,6 +117,23 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
         return []
 
 ###########################
+# Histórico de Manutenção
+###########################
+
+def get_historico_manutencao_por_patrimonio(patrimonio):
+    """
+    Retorna todos os registros de manutenção (tabela 'historico_manutencao')
+    para a máquina identificada pelo numero_patrimonio.
+    """
+    try:
+        resp = supabase.table("historico_manutencao").select("*").eq("numero_patrimonio", patrimonio).execute()
+        return resp.data if resp.data else []
+    except Exception as e:
+        st.error("Erro ao buscar histórico de manutenção.")
+        print(f"Erro: {e}")
+        return []
+
+###########################
 # Cadastro de Máquina (com foto opcional)
 ###########################
 
@@ -175,13 +192,13 @@ def cadastro_maquina():
             st.write(e)
 
 ###########################
-# Mostrar Inventário (com edição e foto)
+# Mostrar Inventário (com edição, foto e histórico)
 ###########################
 
 def show_inventory_list():
     """
     Lista o inventário com opção de editar qualquer campo (incluindo foto),
-    excluir e ver histórico (chamados e peças).
+    excluir e ver histórico (chamados, peças utilizadas e manutenção).
     """
     st.subheader("Inventário - Lista (com foto)")
     machines = get_machines_from_inventory()
@@ -284,8 +301,9 @@ def show_inventory_list():
                     supabase.table("inventario").delete().eq("numero_patrimonio", selected_patrimonio).execute()
                     st.success("Máquina excluída com sucesso!")
 
-            # Exemplo de histórico
+            # Histórico Completo da Máquina
             with st.expander("Histórico Completo da Máquina"):
+                # Chamados Técnicos
                 st.markdown("**Chamados Técnicos:**")
                 try:
                     mod = __import__("chamados", fromlist=["get_chamados_por_patrimonio"])
@@ -300,12 +318,23 @@ def show_inventory_list():
                 else:
                     st.write("Nenhum chamado técnico encontrado para este item.")
                 
+                # Peças Utilizadas
                 st.markdown("**Peças Utilizadas:**")
                 pecas = get_pecas_usadas_por_patrimonio(selected_patrimonio)
                 if pecas:
                     st.dataframe(pd.DataFrame(pecas))
                 else:
                     st.write("Nenhuma peça utilizada encontrada para este item.")
+
+                # Histórico de Manutenção
+                st.markdown("**Histórico de Manutenção:**")
+                from inventario import get_historico_manutencao_por_patrimonio
+                historico_manut = get_historico_manutencao_por_patrimonio(selected_patrimonio)
+                if historico_manut:
+                    st.dataframe(pd.DataFrame(historico_manut))
+                else:
+                    st.write("Nenhum registro de manutenção encontrado para este item.")
+
     else:
         st.write("Nenhum item encontrado no inventário.")
 
