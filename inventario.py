@@ -442,3 +442,35 @@ def show_inventory_list_with_batch_edit():
                 st.warning("Selecione um campo e insira/defina o novo valor.")
         else:
             st.warning("Nenhum item selecionado.")
+
+###########################
+# Dashboard do Inventário
+###########################
+def dashboard_inventario():
+    """
+    Exemplo de painel simples do inventário: conta quantas máquinas em cada status,
+    e exibe um gráfico de barras.
+    """
+    st.subheader("Dashboard do Inventário")
+    data = get_machines_from_inventory()
+    if not data:
+        st.info("Nenhum item no inventário.")
+        return
+
+    df = pd.DataFrame(data)
+
+    # Contagem por status
+    status_count = df["status"].value_counts().reset_index()
+    status_count.columns = ["status", "quantidade"]
+
+    st.markdown("#### Contagem por Status")
+    st.table(status_count)
+
+    # Exemplo de gráfico de barras
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    ax.bar(status_count["status"], status_count["quantidade"], color="green")
+    ax.set_xlabel("Status")
+    ax.set_ylabel("Quantidade")
+    ax.set_title("Distribuição de Status no Inventário")
+    st.pyplot(fig)
