@@ -28,7 +28,6 @@ from chamados import (
 from inventario import (
     show_inventory_list,              
     cadastro_maquina,                 
-    show_inventory_list_with_batch_edit,
     dashboard_inventario,
     get_machines_from_inventory       
 )
@@ -358,14 +357,12 @@ def inventario_page():
     Sub-opções:
       1) Listar Inventário
       2) Cadastrar Máquina
-      3) Listar/Edit em Massa
-      4) Dashboard Inventário
+      3) Dashboard Inventário
     """
     st.subheader("Inventário")
     menu_inventario = st.radio("Selecione uma opção:", [
         "Listar Inventário",
         "Cadastrar Máquina",
-        "Listar/Edit em Massa",
         "Dashboard Inventário"
     ])
 
@@ -374,9 +371,6 @@ def inventario_page():
 
     elif menu_inventario == "Cadastrar Máquina":
         cadastro_maquina()
-
-    elif menu_inventario == "Listar/Edit em Massa":
-        show_inventory_list_with_batch_edit()
 
     elif menu_inventario == "Dashboard Inventário":
         dashboard_inventario()
