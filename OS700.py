@@ -1,5 +1,3 @@
-# os700z.py
-
 import streamlit as st
 import os
 import logging
@@ -26,16 +24,16 @@ from chamados import (
     calculate_working_hours
 )
 from inventario import (
-    show_inventory_list,              
-    cadastro_maquina,                 
-    dashboard_inventario,
-    get_machines_from_inventory       
+    show_inventory_list,   # <-- Listagem com filtros e edição
+    cadastro_maquina,      # <-- Cadastro de máquina
+    dashboard_inventario,  # <-- Dashboard do inventário
+    get_machines_from_inventory
 )
 from ubs import get_ubs_list
 from setores import get_setores_list
 from estoque import manage_estoque, get_estoque
 
-# Configuração do logging
+# Configuração de logging
 logging.basicConfig(level=logging.INFO)
 
 # Inicialização de sessão
@@ -350,12 +348,12 @@ def chamados_tecnicos_page():
                 st.error("Informe a solução para finalizar o chamado.")
 
 ####################################
-# 6) Página de Inventário
+# 6) Página de Inventário (sem Edição em Massa)
 ####################################
 def inventario_page():
     """
     Sub-opções:
-      1) Listar Inventário
+      1) Listar Inventário (com filtros)
       2) Cadastrar Máquina
       3) Dashboard Inventário
     """
@@ -482,7 +480,6 @@ def relatorios_page():
     else:
         st.write("Nenhum chamado finalizado no período para calcular tempo médio de resolução.")
 
-    # Chamados por tipo de defeito
     if "tipo_defeito" in df_period.columns:
         chamados_tipo = df_period.groupby("tipo_defeito").size().reset_index(name="qtd")
         st.markdown("#### Chamados por Tipo de Defeito")
@@ -495,7 +492,6 @@ def relatorios_page():
         plt.xticks(rotation=45, ha="right")
         st.pyplot(fig_tipo)
 
-    # Chamados por UBS e Setor
     chamados_ubs_setor = df_period.groupby(["ubs", "setor"]).size().reset_index(name="qtd_chamados")
     st.markdown("#### Chamados por UBS e Setor")
     st.dataframe(chamados_ubs_setor)
@@ -520,7 +516,6 @@ def relatorios_page():
     plt.xticks(rotation=45)
     st.pyplot(fig1)
 
-    # Geração do PDF
     if st.button("Gerar Relatório de Chamados em PDF"):
         pdf = FPDF()
         pdf.add_page()
