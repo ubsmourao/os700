@@ -222,7 +222,7 @@ def show_inventory_list():
         st.write("Nenhum item encontrado no inventário.")
 
 ###########################
-# Edição em Massa
+# Edição em Massa (com selectbox para new_value)
 ###########################
 
 def batch_update_inventory(field_to_update, new_value, patrimonios):
@@ -242,7 +242,7 @@ def show_inventory_list_with_batch_edit():
     """
     Lista o inventário com filtros, exportação de CSV filtrado,
     e edição em massa de um campo (status, setor, localizacao, etc.).
-    Corrige o 'if selected:' -> checamos se 'selected' é lista e seu tamanho.
+    Agora com selectbox para o novo valor também.
     """
     st.subheader("Inventário - Edição em Massa")
 
@@ -281,33 +281,48 @@ def show_inventory_list_with_batch_edit():
         update_mode="MODEL_CHANGED"
     )
 
-    # st_aggrid retorna um dicionário com 'selected_rows'
-    selected = grid_response["selected_rows"]  # Normalmente é uma lista
+    selected = grid_response["selected_rows"]  # lista de dicionários
 
-    # Se 'selected' é lista, checamos se tem itens
-    if isinstance(selected, list):
-        if len(selected) > 0:
-            st.write(f"{len(selected)} itens selecionados.")
-    else:
-        pass
+    if isinstance(selected, list) and len(selected) > 0:
+        st.write(f"{len(selected)} itens selecionados.")
 
     # Exportar CSV filtrado
     if st.button("Exportar CSV Filtrado"):
         csv_filtrado = df.to_csv(index=False).encode("utf-8")
         st.download_button("Baixar CSV Filtrado", data=csv_filtrado, file_name="inventario_filtrado.csv", mime="text/csv")
 
-    # Edição em massa
     st.markdown("---")
     st.subheader("Edição em Massa")
+
+    # Campo a atualizar
     field = st.selectbox("Campo para atualizar", ["status", "setor", "localizacao", "propria_locada"])
-    new_value = st.text_input("Novo valor para esse campo")
+
+    # Mapeamento de opções para cada campo
+    field_options_map = {
+        "status": ["Ativo", "Em Manutencao", "Inativo"],
+        "setor": get_setores_list(),
+        "localizacao": get_ubs_list(),
+        "propria_locada": ["Propria", "Locada"]
+    }
+
+    # Exibe um selectbox para o novo valor, baseado no campo escolhido
+    if field:
+        options_for_new_value = field_options_map.get(field, [])
+        if options_for_new_value:
+            new_value = st.selectbox("Novo valor para esse campo", options_for_new_value)
+        else:
+            # Se por acaso o campo não estiver no map, fallback para text_input
+            new_value = st.text_input("Novo valor para esse campo")
+    else:
+        new_value = st.text_input("Novo valor para esse campo")
+
     if st.button("Aplicar Edição em Massa"):
         if isinstance(selected, list) and len(selected) > 0:
             patrimonios_selecionados = [row["numero_patrimonio"] for row in selected]
             if field and new_value:
                 batch_update_inventory(field, new_value, patrimonios_selecionados)
             else:
-                st.warning("Selecione um campo e insira o novo valor.")
+                st.warning("Selecione um campo e insira/defina o novo valor.")
         else:
             st.warning("Nenhum item selecionado.")
 
