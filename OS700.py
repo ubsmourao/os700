@@ -619,3 +619,7 @@ if selected in pages:
     pages[selected]()
 else:
     st.write("Página não encontrada.")
+    # No final do seu arquivo principal
+
+st.markdown("---")  # Linha horizontal (opcional)
+st.markdown("© 2025 **Infocustec**. Todos os direitos reservados.", unsafe_allow_html=True)
