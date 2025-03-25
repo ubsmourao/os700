@@ -115,7 +115,7 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
         return []
 
 ###########################
-# Mostrar Inventário (Exemplo Original, mas com selectbox)
+# Mostrar Inventário (com selectbox)
 ###########################
 
 def show_inventory_list():
