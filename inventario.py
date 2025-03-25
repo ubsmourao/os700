@@ -96,7 +96,6 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
     Recupera todas as peças utilizadas associadas aos chamados técnicos da máquina.
     """
     try:
-        # Importação local para evitar dependência circular
         mod = __import__("chamados", fromlist=["get_chamados_por_patrimonio"])
         get_chamados_por_patrimonio = mod.get_chamados_por_patrimonio
     except Exception as e:
@@ -116,14 +115,15 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
         return []
 
 ###########################
-# Mostrar Inventário (Exemplo Original)
+# Mostrar Inventário (Exemplo Original, mas com selectbox)
 ###########################
 
 def show_inventory_list():
     """
     Lista o inventário com opção de editar, excluir e ver histórico (chamados e peças).
+    Agora usando selectbox para 'tipo', 'status', 'localizacao', 'setor'.
     """
-    st.subheader("Inventário - Lista Original")
+    st.subheader("Inventário - Lista (com selectbox na edição)")
     machines = get_machines_from_inventory()
     if machines:
         df = pd.DataFrame(machines)
@@ -136,10 +136,19 @@ def show_inventory_list():
             
             with st.expander("Editar Item de Inventário"):
                 with st.form("editar_item"):
-                    tipo = st.text_input("Tipo", value=item.get("tipo", ""))
+                    # Tipo
+                    tipo_options = ["Computador", "Impressora", "Monitor", "Outro"]
+                    if item.get("tipo") in tipo_options:
+                        tipo_index = tipo_options.index(item.get("tipo"))
+                    else:
+                        tipo_index = 0
+                    tipo = st.selectbox("Tipo de Equipamento", tipo_options, index=tipo_index)
+
+                    # Marca e Modelo continuam texto livre
                     marca = st.text_input("Marca", value=item.get("marca", ""))
                     modelo = st.text_input("Modelo", value=item.get("modelo", ""))
 
+                    # Status
                     status_options = ["Ativo", "Em Manutencao", "Inativo"]
                     if item.get("status") in status_options:
                         status_index = status_options.index(item.get("status"))
@@ -147,8 +156,15 @@ def show_inventory_list():
                         status_index = 0
                     status = st.selectbox("Status", status_options, index=status_index)
 
-                    localizacao = st.text_input("Localização", value=item.get("localizacao", ""))
-                    
+                    # Localização (UBS)
+                    ubs_list = get_ubs_list()
+                    if item.get("localizacao") in ubs_list:
+                        loc_index = ubs_list.index(item.get("localizacao"))
+                    else:
+                        loc_index = 0
+                    localizacao = st.selectbox("Localização (UBS)", ubs_list, index=loc_index)
+
+                    # Setor
                     setores_list = get_setores_list()
                     if item.get("setor") in setores_list:
                         setor_index = setores_list.index(item.get("setor"))
@@ -156,12 +172,13 @@ def show_inventory_list():
                         setor_index = 0
                     setor = st.selectbox("Setor", setores_list, index=setor_index)
 
+                    # Própria/Locada
                     propria_options = ["Propria", "Locada"]
                     if item.get("propria_locada") in propria_options:
                         propria_index = propria_options.index(item.get("propria_locada"))
                     else:
                         propria_index = 0
-                    propria_locada = st.selectbox("Propria/Locada", propria_options, index=propria_index)
+                    propria_locada = st.selectbox("Própria ou Locada", propria_options, index=propria_index)
 
                     submit = st.form_submit_button("Atualizar Item")
                     if submit:
@@ -205,7 +222,7 @@ def show_inventory_list():
         st.write("Nenhum item encontrado no inventário.")
 
 ###########################
-# Batch Update (Edição em Massa)
+# Edição em Massa
 ###########################
 
 def batch_update_inventory(field_to_update, new_value, patrimonios):
@@ -272,9 +289,6 @@ def show_inventory_list_with_batch_edit():
         if len(selected) > 0:
             st.write(f"{len(selected)} itens selecionados.")
     else:
-        # Se por algum motivo 'selected' fosse DataFrame, faríamos:
-        # if not selected.empty:
-        #     st.write(f"{len(selected)} itens selecionados.")
         pass
 
     # Exportar CSV filtrado
@@ -288,7 +302,6 @@ def show_inventory_list_with_batch_edit():
     field = st.selectbox("Campo para atualizar", ["status", "setor", "localizacao", "propria_locada"])
     new_value = st.text_input("Novo valor para esse campo")
     if st.button("Aplicar Edição em Massa"):
-        # Verifica se 'selected' é lista e se há itens
         if isinstance(selected, list) and len(selected) > 0:
             patrimonios_selecionados = [row["numero_patrimonio"] for row in selected]
             if field and new_value:
@@ -387,16 +400,20 @@ def cadastro_maquina():
     Se quiser datas de aquisição/garantia, inclua os campos aqui e no BD.
     """
     st.subheader("Cadastrar Máquina no Inventário")
-    tipo = st.selectbox("Tipo de Equipamento", ["Computador", "Impressora", "Monitor", "Outro"])
+    tipo_options = ["Computador", "Impressora", "Monitor", "Outro"]
+    tipo = st.selectbox("Tipo de Equipamento", tipo_options)
     marca = st.text_input("Marca")
     modelo = st.text_input("Modelo")
     numero_serie = st.text_input("Número de Série (Opcional)")
     patrimonio = st.text_input("Número de Patrimônio")
-    status = st.selectbox("Status", ["Ativo", "Em Manutencao", "Inativo"])
-    ubs = st.selectbox("Localização (UBS)", sorted(get_ubs_list()))
+    status_options = ["Ativo", "Em Manutencao", "Inativo"]
+    status = st.selectbox("Status", status_options)
+    ubs_list = get_ubs_list()
+    localizacao = st.selectbox("Localização (UBS)", sorted(ubs_list))
     setores_list = get_setores_list()
     setor = st.selectbox("Setor", sorted(setores_list))
-    propria_locada = st.selectbox("Própria ou Locada", ["Propria", "Locada"])
+    propria_options = ["Propria", "Locada"]
+    propria_locada = st.selectbox("Própria ou Locada", propria_options)
 
     if st.button("Cadastrar Máquina"):
         try:
@@ -411,7 +428,7 @@ def cadastro_maquina():
                     "modelo": modelo,
                     "numero_serie": numero_serie or None,
                     "status": status,
-                    "localizacao": ubs,
+                    "localizacao": localizacao,
                     "propria_locada": propria_locada,
                     "setor": setor
                 }
