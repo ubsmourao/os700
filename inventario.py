@@ -396,7 +396,6 @@ def manage_images():
             resp = supabase.table("inventario").select("image_data").eq("numero_patrimonio", patrimonio).execute()
             if resp.data and resp.data[0].get("image_data"):
                 encoded = resp.data[0]["image_data"]
-                import base64
                 file_content = base64.b64decode(encoded)
                 st.image(file_content, caption=f"Imagem da máquina {patrimonio}")
             else:
