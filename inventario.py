@@ -2,12 +2,11 @@
 
 import streamlit as st
 import pandas as pd
-import base64
+import base64  # Import para manipular a imagem em base64
 import pytz
 from datetime import datetime
 from st_aggrid import AgGrid, GridOptionsBuilder
 
-# Ajuste conforme seu projeto
 from supabase_client import supabase
 from setores import get_setores_list
 from ubs import get_ubs_list
@@ -45,11 +44,13 @@ def edit_inventory_item(patrimonio, new_values):
 def add_machine_to_inventory(
     tipo, marca, modelo, numero_serie, status, localizacao,
     propria_locada, patrimonio, setor,
-    data_aquisicao=None, data_garantia_fim=None
+    data_aquisicao=None, data_garantia_fim=None,
+    image_data=None
 ):
     """
     Adiciona nova máquina ao inventário, incluindo data_aquisicao e data_garantia_fim
     se quiser usar controle de garantia. Ajuste o BD conforme necessidade.
+    Permite também inserir image_data (foto em base64).
     """
     try:
         # Verifica se já existe esse patrimônio
@@ -68,7 +69,8 @@ def add_machine_to_inventory(
             "propria_locada": propria_locada,
             "setor": setor,
             "data_aquisicao": data_aquisicao,
-            "data_garantia_fim": data_garantia_fim
+            "data_garantia_fim": data_garantia_fim,
+            "image_data": image_data  # salva a foto em base64
         }
         supabase.table("inventario").insert(data).execute()
         st.success("Máquina adicionada ao inventário com sucesso!")
@@ -115,15 +117,73 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
         return []
 
 ###########################
-# Mostrar Inventário (com selectbox)
+# Cadastro de Máquina (com foto opcional)
+###########################
+
+def cadastro_maquina():
+    """
+    Cadastro básico de máquina no inventário, incluindo foto opcional.
+    """
+    st.subheader("Cadastrar Máquina no Inventário")
+
+    tipo_options = ["Computador", "Impressora", "Monitor", "Outro"]
+    tipo = st.selectbox("Tipo de Equipamento", tipo_options)
+
+    marca = st.text_input("Marca")
+    modelo = st.text_input("Modelo")
+    numero_serie = st.text_input("Número de Série (Opcional)")
+
+    patrimonio = st.text_input("Número de Patrimônio")
+
+    status_options = ["Ativo", "Em Manutencao", "Inativo"]
+    status = st.selectbox("Status", status_options)
+
+    ubs_list = get_ubs_list()
+    localizacao = st.selectbox("Localização (UBS)", sorted(ubs_list))
+
+    setores_list = get_setores_list()
+    setor = st.selectbox("Setor", sorted(setores_list))
+
+    propria_options = ["Propria", "Locada"]
+    propria_locada = st.selectbox("Própria ou Locada", propria_options)
+
+    # Upload de foto (opcional)
+    uploaded_file = st.file_uploader("Foto da máquina (opcional)", type=["png","jpg","jpeg"])
+
+    if st.button("Cadastrar Máquina"):
+        # Se houver imagem, converte para base64
+        image_data = None
+        if uploaded_file is not None:
+            file_content = uploaded_file.read()
+            image_data = base64.b64encode(file_content).decode("utf-8")
+
+        try:
+            add_machine_to_inventory(
+                tipo=tipo,
+                marca=marca,
+                modelo=modelo,
+                numero_serie=numero_serie,
+                status=status,
+                localizacao=localizacao,
+                propria_locada=propria_locada,
+                patrimonio=patrimonio,
+                setor=setor,
+                image_data=image_data  # Envia a foto (em base64) para salvar
+            )
+        except Exception as e:
+            st.error("Erro ao cadastrar máquina.")
+            st.write(e)
+
+###########################
+# Mostrar Inventário (com edição e foto)
 ###########################
 
 def show_inventory_list():
     """
-    Lista o inventário com opção de editar, excluir e ver histórico (chamados e peças).
-    Agora usando selectbox para 'tipo', 'status', 'localizacao', 'setor'.
+    Lista o inventário com opção de editar qualquer campo (incluindo foto),
+    excluir e ver histórico (chamados e peças).
     """
-    st.subheader("Inventário - Lista (com selectbox na edição)")
+    st.subheader("Inventário - Lista (com foto)")
     machines = get_machines_from_inventory()
     if machines:
         df = pd.DataFrame(machines)
@@ -133,9 +193,17 @@ def show_inventory_list():
         selected_patrimonio = st.selectbox("Selecione o patrimônio para visualizar detalhes", patrimonio_options)
         if selected_patrimonio:
             item = df[df["numero_patrimonio"] == selected_patrimonio].iloc[0]
-            
-            with st.expander("Editar Item de Inventário"):
-                with st.form("editar_item"):
+
+            # Exibe a imagem atual, se existir
+            st.markdown("### Foto Atual da Máquina")
+            if item.get("image_data"):
+                current_image = base64.b64decode(item["image_data"])
+                st.image(current_image, caption=f"Foto da máquina {selected_patrimonio}")
+            else:
+                st.info("Nenhuma foto cadastrada para esta máquina.")
+
+            with st.expander("Editar Máquina"):
+                with st.form("editar_maquina"):
                     # Tipo
                     tipo_options = ["Computador", "Impressora", "Monitor", "Outro"]
                     if item.get("tipo") in tipo_options:
@@ -144,59 +212,79 @@ def show_inventory_list():
                         tipo_index = 0
                     tipo = st.selectbox("Tipo de Equipamento", tipo_options, index=tipo_index)
 
-                    # Marca e Modelo continuam texto livre
                     marca = st.text_input("Marca", value=item.get("marca", ""))
                     modelo = st.text_input("Modelo", value=item.get("modelo", ""))
+                    numero_serie = st.text_input("Número de Série", value=item.get("numero_serie", ""))
 
-                    # Status
                     status_options = ["Ativo", "Em Manutencao", "Inativo"]
-                    if item.get("status") in status_options:
-                        status_index = status_options.index(item.get("status"))
+                    if item["status"] in status_options:
+                        status_index = status_options.index(item["status"])
                     else:
                         status_index = 0
                     status = st.selectbox("Status", status_options, index=status_index)
 
                     # Localização (UBS)
                     ubs_list = get_ubs_list()
-                    if item.get("localizacao") in ubs_list:
-                        loc_index = ubs_list.index(item.get("localizacao"))
+                    if item["localizacao"] in ubs_list:
+                        loc_index = ubs_list.index(item["localizacao"])
                     else:
                         loc_index = 0
-                    localizacao = st.selectbox("Localização (UBS)", ubs_list, index=loc_index)
+                    localizacao = st.selectbox("Localização (UBS)", sorted(ubs_list), index=loc_index)
 
                     # Setor
                     setores_list = get_setores_list()
-                    if item.get("setor") in setores_list:
-                        setor_index = setores_list.index(item.get("setor"))
+                    if item["setor"] in setores_list:
+                        setor_index = setores_list.index(item["setor"])
                     else:
                         setor_index = 0
-                    setor = st.selectbox("Setor", setores_list, index=setor_index)
+                    setor = st.selectbox("Setor", sorted(setores_list), index=setor_index)
 
-                    # Própria/Locada
                     propria_options = ["Propria", "Locada"]
-                    if item.get("propria_locada") in propria_options:
-                        propria_index = propria_options.index(item.get("propria_locada"))
+                    if item["propria_locada"] in propria_options:
+                        propria_index = propria_options.index(item["propria_locada"])
                     else:
                         propria_index = 0
                     propria_locada = st.selectbox("Própria ou Locada", propria_options, index=propria_index)
 
-                    submit = st.form_submit_button("Atualizar Item")
+                    # File uploader para trocar a foto
+                    uploaded_file = st.file_uploader("Nova foto (opcional)", type=["png","jpg","jpeg"])
+                    
+                    # Botão para remover foto atual
+                    remove_foto = st.checkbox("Remover foto atual?", value=False)
+
+                    submit = st.form_submit_button("Salvar Alterações")
                     if submit:
                         new_values = {
                             "tipo": tipo,
                             "marca": marca,
                             "modelo": modelo,
+                            "numero_serie": numero_serie or None,
                             "status": status,
                             "localizacao": localizacao,
                             "setor": setor,
                             "propria_locada": propria_locada
                         }
-                        edit_inventory_item(selected_patrimonio, new_values)
-            
-            with st.expander("Excluir Item do Inventário"):
-                if st.button("Excluir este item"):
-                    delete_inventory_item(selected_patrimonio)
-            
+
+                        # Se o usuário marcou para remover a foto, seta 'image_data' para None
+                        if remove_foto:
+                            new_values["image_data"] = None
+                        else:
+                            # Se subiu uma nova foto, atualiza
+                            if uploaded_file is not None:
+                                file_content = uploaded_file.read()
+                                encoded = base64.b64encode(file_content).decode("utf-8")
+                                new_values["image_data"] = encoded
+
+                        # Atualiza no BD
+                        supabase.table("inventario").update(new_values).eq("numero_patrimonio", selected_patrimonio).execute()
+                        st.success("Máquina atualizada com sucesso!")
+
+            with st.expander("Excluir Máquina do Inventário"):
+                if st.button("Excluir esta máquina"):
+                    supabase.table("inventario").delete().eq("numero_patrimonio", selected_patrimonio).execute()
+                    st.success("Máquina excluída com sucesso!")
+
+            # Exemplo de histórico
             with st.expander("Histórico Completo da Máquina"):
                 st.markdown("**Chamados Técnicos:**")
                 try:
@@ -211,7 +299,7 @@ def show_inventory_list():
                     st.dataframe(pd.DataFrame(chamados))
                 else:
                     st.write("Nenhum chamado técnico encontrado para este item.")
-
+                
                 st.markdown("**Peças Utilizadas:**")
                 pecas = get_pecas_usadas_por_patrimonio(selected_patrimonio)
                 if pecas:
@@ -325,129 +413,3 @@ def show_inventory_list_with_batch_edit():
                 st.warning("Selecione um campo e insira/defina o novo valor.")
         else:
             st.warning("Nenhum item selecionado.")
-
-###########################
-# Dashboard do Inventário
-###########################
-
-def dashboard_inventario():
-    """
-    Exemplo de dashboard simples: contagem por status e um gráfico de barras.
-    """
-    st.subheader("Dashboard do Inventário")
-    data = get_machines_from_inventory()
-    if not data:
-        st.info("Nenhum item no inventário.")
-        return
-    df = pd.DataFrame(data)
-
-    # Contagem por status
-    contagem_status = df["status"].value_counts().reset_index()
-    contagem_status.columns = ["status", "quantidade"]
-
-    st.write("Contagem por Status:")
-    st.dataframe(contagem_status)
-
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    ax.bar(contagem_status["status"], contagem_status["quantidade"], color="green")
-    ax.set_xlabel("Status")
-    ax.set_ylabel("Quantidade")
-    ax.set_title("Distribuição de Status no Inventário")
-    st.pyplot(fig)
-
-###########################
-# Gerenciar Imagens
-###########################
-
-def manage_images():
-    """
-    Permite fazer upload de imagem e associar ao patrimônio,
-    salvando em base64 no campo 'image_data'.
-    """
-    st.subheader("Gerenciar Imagens do Equipamento")
-
-    patrimonio = st.text_input("Informe o Patrimônio")
-    uploaded_file = st.file_uploader("Selecione uma imagem (JPEG/PNG)")
-
-    if st.button("Enviar Imagem"):
-        if not patrimonio:
-            st.warning("Informe o patrimônio.")
-            return
-        if not uploaded_file:
-            st.warning("Nenhum arquivo selecionado.")
-            return
-
-        file_content = uploaded_file.read()
-        encoded = base64.b64encode(file_content).decode("utf-8")
-        try:
-            supabase.table("inventario").update({"image_data": encoded}).eq("numero_patrimonio", patrimonio).execute()
-            st.success("Imagem enviada com sucesso!")
-        except Exception as e:
-            st.error("Erro ao salvar imagem no inventário.")
-            st.write(e)
-
-    # Exibir imagem se existir
-    if st.button("Ver Imagem"):
-        if not patrimonio:
-            st.warning("Informe o patrimônio.")
-            return
-        try:
-            resp = supabase.table("inventario").select("image_data").eq("numero_patrimonio", patrimonio).execute()
-            if resp.data and resp.data[0].get("image_data"):
-                encoded = resp.data[0]["image_data"]
-                file_content = base64.b64decode(encoded)
-                st.image(file_content, caption=f"Imagem da máquina {patrimonio}")
-            else:
-                st.info("Nenhuma imagem encontrada para este patrimônio.")
-        except Exception as e:
-            st.error("Erro ao buscar imagem.")
-            st.write(e)
-
-###########################
-# Cadastro de Máquina
-###########################
-
-def cadastro_maquina():
-    """
-    Cadastro básico de máquina no inventário.
-    Se quiser datas de aquisição/garantia, inclua os campos aqui e no BD.
-    """
-    st.subheader("Cadastrar Máquina no Inventário")
-    tipo_options = ["Computador", "Impressora", "Monitor", "Outro"]
-    tipo = st.selectbox("Tipo de Equipamento", tipo_options)
-    marca = st.text_input("Marca")
-    modelo = st.text_input("Modelo")
-    numero_serie = st.text_input("Número de Série (Opcional)")
-    patrimonio = st.text_input("Número de Patrimônio")
-    status_options = ["Ativo", "Em Manutencao", "Inativo"]
-    status = st.selectbox("Status", status_options)
-    ubs_list = get_ubs_list()
-    localizacao = st.selectbox("Localização (UBS)", sorted(ubs_list))
-    setores_list = get_setores_list()
-    setor = st.selectbox("Setor", sorted(setores_list))
-    propria_options = ["Propria", "Locada"]
-    propria_locada = st.selectbox("Própria ou Locada", propria_options)
-
-    if st.button("Cadastrar Máquina"):
-        try:
-            resp = supabase.table("inventario").select("numero_patrimonio").eq("numero_patrimonio", patrimonio).execute()
-            if resp.data:
-                st.error("Máquina com este patrimônio já existe.")
-            else:
-                data = {
-                    "numero_patrimonio": patrimonio,
-                    "tipo": tipo,
-                    "marca": marca,
-                    "modelo": modelo,
-                    "numero_serie": numero_serie or None,
-                    "status": status,
-                    "localizacao": localizacao,
-                    "propria_locada": propria_locada,
-                    "setor": setor
-                }
-                supabase.table("inventario").insert(data).execute()
-                st.success("Máquina cadastrada com sucesso!")
-        except Exception as e:
-            st.error("Erro ao cadastrar máquina.")
-            st.write(e)
