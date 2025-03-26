@@ -412,8 +412,8 @@ def dashboard_inventario():
     Exemplo de painel do inventário que inclui:
       - Distribuição por Status
       - Distribuição por Tipo
-      - Distribuição por UBS (apenas Computador e Impressora)
-      - Distribuição por Setor (sem mês)
+      - Distribuição por UBS (Computadores e Impressoras SEPARADOS)
+      - Distribuição por Setor
       - Máquinas com mais chamados
     """
     st.subheader("Dashboard do Inventário")
@@ -468,27 +468,35 @@ def dashboard_inventario():
         st.warning("Coluna 'tipo' não encontrada no inventário.")
 
     #################################################
-    # 3) Distribuição por UBS (somente Computador e Impressora)
+    # 3) Distribuição por UBS (Computadores e Impressoras, separados)
     #################################################
-    if "localizacao" in df.columns:
-        st.markdown("### 3) Distribuição por UBS (apenas Computador e Impressora)")
+    if "localizacao" in df.columns and "tipo" in df.columns:
+        st.markdown("### 3) Distribuição por UBS (Computadores e Impressoras, separados)")
+
         # Filtra somente Computador e Impressora
         df_ubs = df[df["tipo"].isin(["Computador", "Impressora"])]
         if df_ubs.empty:
             st.write("Nenhum Computador ou Impressora encontrado no inventário.")
         else:
-            ubs_count = df_ubs["localizacao"].value_counts().reset_index()
-            ubs_count.columns = ["localizacao", "quantidade"]
-            st.table(ubs_count)
+            # Agrupa por localizacao e tipo
+            group_ubs = df_ubs.groupby(["localizacao", "tipo"]).size().reset_index(name="quantidade")
 
+            # Faz pivot para ter colunas: Computador, Impressora
+            pivot_ubs = group_ubs.pivot(index="localizacao", columns="tipo", values="quantidade").fillna(0)
+
+            st.markdown("#### Tabela por UBS (linhas) e Tipo (colunas)")
+            st.table(pivot_ubs)
+
+            # Faz um gráfico de barras lado a lado (stacked=False)
             fig3, ax3 = plt.subplots()
-            ax3.barh(ubs_count["localizacao"], ubs_count["quantidade"], color="orange")
-            ax3.set_xlabel("Quantidade")
-            ax3.set_ylabel("UBS (Localização)")
-            ax3.set_title("Computadores e Impressoras por UBS")
+            pivot_ubs.plot(kind="bar", ax=ax3, stacked=False)
+            ax3.set_xlabel("UBS (Localização)")
+            ax3.set_ylabel("Quantidade")
+            ax3.set_title("Computadores e Impressoras por UBS (Separados)")
+            plt.xticks(rotation=45, ha="right")
             st.pyplot(fig3)
     else:
-        st.warning("Coluna 'localizacao' não encontrada no inventário.")
+        st.warning("Coluna 'localizacao' ou 'tipo' não encontrada no inventário.")
 
     #################################################
     # 4) Distribuição por Setor (sem mês)
