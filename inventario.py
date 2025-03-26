@@ -14,7 +14,7 @@ from ubs import get_ubs_list
 FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
 
 ###########################
-# Funções Básicas
+# 1. Funções Básicas
 ###########################
 
 def get_machines_from_inventory():
@@ -90,7 +90,7 @@ def delete_inventory_item(patrimonio):
         print(f"Erro: {e}")
 
 ###########################
-# Peças Usadas
+# 2. Peças Usadas
 ###########################
 
 def get_pecas_usadas_por_patrimonio(patrimonio):
@@ -117,7 +117,7 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
         return []
 
 ###########################
-# Histórico de Manutenção
+# 3. Histórico de Manutenção
 ###########################
 
 def get_historico_manutencao_por_patrimonio(patrimonio):
@@ -134,7 +134,7 @@ def get_historico_manutencao_por_patrimonio(patrimonio):
         return []
 
 ###########################
-# Cadastro de Máquina (com foto opcional)
+# 4. Cadastro de Máquina (com foto opcional)
 ###########################
 
 def cadastro_maquina():
@@ -143,7 +143,7 @@ def cadastro_maquina():
     """
     st.subheader("Cadastrar Máquina no Inventário")
 
-    tipo_options = ["Computador", "Impressora", "Monitor", "Nobreak", "Estabilizador", "Outro"]
+    tipo_options = ["Computador", "Impressora", "Monitor", "Nobreak", "Outro"]
     tipo = st.selectbox("Tipo de Equipamento", tipo_options)
 
     marca = st.text_input("Marca")
@@ -192,7 +192,7 @@ def cadastro_maquina():
             st.write(e)
 
 ###########################
-# Mostrar Inventário (com edição, foto e histórico) + Filtros
+# 5. Mostrar Inventário (com edição, foto, histórico) + Filtros
 ###########################
 
 def show_inventory_list():
@@ -266,11 +266,10 @@ def show_inventory_list():
     else:
         st.warning("Nenhum resultado com esses filtros.")
 
-    # Abaixo, opcionalmente, permitir que o usuário selecione um patrimônio para ver detalhes
+    # Abaixo, permitir que o usuário selecione um patrimônio para ver detalhes
     st.markdown("---")
     st.subheader("Detalhes / Edição de Item do Inventário")
 
-    # Caso queira permitir seleção do item a partir do DF filtrado:
     patrimonio_options = df["numero_patrimonio"].unique().tolist()
     if patrimonio_options:
         selected_patrimonio = st.selectbox("Selecione o patrimônio para visualizar detalhes", patrimonio_options)
@@ -291,7 +290,7 @@ def show_inventory_list():
         with st.expander("Editar Máquina"):
             with st.form("editar_maquina"):
                 # Tipo
-                tipo_options = ["Computador", "Impressora", "Monitor", "Outro"]
+                tipo_options = ["Computador", "Impressora", "Monitor", "Nobreak", "Outro"]
                 if item.get("tipo") in tipo_options:
                     tipo_index = tipo_options.index(item.get("tipo"))
                 else:
@@ -310,18 +309,20 @@ def show_inventory_list():
                 status = st.selectbox("Status", status_options, index=status_index)
 
                 # Localização (UBS)
-                if item["localizacao"] in ubs_list:
-                    loc_index = ubs_list.index(item["localizacao"])
+                ubs_list_sorted = sorted(ubs_list)
+                if item["localizacao"] in ubs_list_sorted:
+                    loc_index = ubs_list_sorted.index(item["localizacao"])
                 else:
                     loc_index = 0
-                localizacao = st.selectbox("Localização (UBS)", sorted(ubs_list), index=loc_index)
+                localizacao = st.selectbox("Localização (UBS)", ubs_list_sorted, index=loc_index)
 
                 # Setor
-                if item["setor"] in setores_list:
-                    setor_index = setores_list.index(item["setor"])
+                setores_list_sorted = sorted(setores_list)
+                if item["setor"] in setores_list_sorted:
+                    setor_index = setores_list_sorted.index(item["setor"])
                 else:
                     setor_index = 0
-                setor = st.selectbox("Setor", sorted(setores_list), index=setor_index)
+                setor = st.selectbox("Setor", setores_list_sorted, index=setor_index)
 
                 propria_options = ["Propria", "Locada"]
                 if item["propria_locada"] in propria_options:
@@ -402,33 +403,136 @@ def show_inventory_list():
                 st.write("Nenhum registro de manutenção encontrado para este item.")
 
 ###########################
-# Dashboard do Inventário
+# 6. Dashboard do Inventário
 ###########################
+
 def dashboard_inventario():
     """
     Exemplo de painel simples do inventário: conta quantas máquinas em cada status,
-    e exibe um gráfico de barras.
+    mostra distribuição por tipo, por UBS/Setor e máquinas com mais chamados.
     """
     st.subheader("Dashboard do Inventário")
+
+    # Carrega dados do inventário
     data = get_machines_from_inventory()
     if not data:
         st.info("Nenhum item no inventário.")
         return
-
     df = pd.DataFrame(data)
 
-    # Contagem por status
-    status_count = df["status"].value_counts().reset_index()
-    status_count.columns = ["status", "quantidade"]
+    # Carrega dados de chamados para cruzar (máquinas mais problemáticas)
+    from chamados import list_chamados
+    chamados = list_chamados() or []
+    df_chamados = pd.DataFrame(chamados)
 
-    st.markdown("#### Contagem por Status")
-    st.table(status_count)
-
-    # Exemplo de gráfico de barras
     import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    ax.bar(status_count["status"], status_count["quantidade"], color="green")
-    ax.set_xlabel("Status")
-    ax.set_ylabel("Quantidade")
-    ax.set_title("Distribuição de Status no Inventário")
-    st.pyplot(fig)
+
+    #################################################
+    # 1) Distribuição por Status
+    #################################################
+    if "status" in df.columns:
+        status_count = df["status"].value_counts().reset_index()
+        status_count.columns = ["status", "quantidade"]
+
+        st.markdown("### 1) Distribuição por Status")
+        st.table(status_count)
+
+        fig, ax = plt.subplots()
+        ax.bar(status_count["status"], status_count["quantidade"], color="green")
+        ax.set_xlabel("Status")
+        ax.set_ylabel("Quantidade")
+        ax.set_title("Distribuição de Status no Inventário")
+        st.pyplot(fig)
+    else:
+        st.warning("Coluna 'status' não encontrada no inventário.")
+
+    #################################################
+    # 2) Distribuição por Tipo de Equipamento
+    #################################################
+    if "tipo" in df.columns:
+        st.markdown("### 2) Distribuição por Tipo de Equipamento")
+        type_count = df["tipo"].value_counts().reset_index()
+        type_count.columns = ["tipo", "quantidade"]
+
+        st.table(type_count)
+
+        fig2, ax2 = plt.subplots()
+        ax2.bar(type_count["tipo"], type_count["quantidade"], color="blue")
+        ax2.set_xlabel("Tipo de Equipamento")
+        ax2.set_ylabel("Quantidade")
+        ax2.set_title("Distribuição por Tipo de Equipamento")
+        plt.xticks(rotation=45)
+        st.pyplot(fig2)
+    else:
+        st.warning("Coluna 'tipo' não encontrada no inventário.")
+
+    #################################################
+    # 3) Distribuição por UBS (Localização) e Setor
+    #################################################
+    # Localização
+    if "localizacao" in df.columns:
+        st.markdown("### 3) Distribuição por UBS (Localização)")
+        ubs_count = df["localizacao"].value_counts().reset_index()
+        ubs_count.columns = ["localizacao", "quantidade"]
+
+        st.table(ubs_count)
+
+        fig3, ax3 = plt.subplots()
+        ax3.barh(ubs_count["localizacao"], ubs_count["quantidade"], color="orange")
+        ax3.set_xlabel("Quantidade")
+        ax3.set_ylabel("UBS (Localização)")
+        ax3.set_title("Distribuição por UBS (Localização)")
+        st.pyplot(fig3)
+    else:
+        st.warning("Coluna 'localizacao' não encontrada no inventário.")
+
+    # Setor
+    if "setor" in df.columns:
+        st.markdown("#### Distribuição por Setor")
+        setor_count = df["setor"].value_counts().reset_index()
+        setor_count.columns = ["setor", "quantidade"]
+
+        st.table(setor_count)
+
+        fig4, ax4 = plt.subplots()
+        ax4.barh(setor_count["setor"], setor_count["quantidade"], color="purple")
+        ax4.set_xlabel("Quantidade")
+        ax4.set_ylabel("Setor")
+        ax4.set_title("Distribuição por Setor")
+        st.pyplot(fig4)
+    else:
+        st.warning("Coluna 'setor' não encontrada no inventário.")
+
+    #################################################
+    # 4) Máquinas com Mais Chamados (Top 10)
+    #################################################
+    st.markdown("### 4) Máquinas com Mais Chamados")
+
+    if df_chamados.empty:
+        st.info("Não há chamados registrados para cruzar com o inventário.")
+    else:
+        # Conta quantos chamados cada patrimônio teve
+        maquinas_mais_chamados = df_chamados.groupby("patrimonio").size().reset_index(name="qtd_chamados")
+
+        # Faz merge com df de inventário
+        df_merged = pd.merge(df, maquinas_mais_chamados, how="left",
+                             left_on="numero_patrimonio", right_on="patrimonio")
+
+        # Substitui NaN por 0 (caso alguma máquina não tenha chamado)
+        df_merged["qtd_chamados"] = df_merged["qtd_chamados"].fillna(0)
+
+        # Ordena do maior para o menor
+        df_merged.sort_values("qtd_chamados", ascending=False, inplace=True)
+
+        # Exibe top 10
+        top_10 = df_merged.head(10)
+
+        st.dataframe(top_10[["numero_patrimonio", "tipo", "marca", "modelo", "qtd_chamados"]])
+
+        fig5, ax5 = plt.subplots()
+        ax5.barh(top_10["numero_patrimonio"].astype(str), top_10["qtd_chamados"], color="red")
+        ax5.set_xlabel("Quantidade de Chamados")
+        ax5.set_ylabel("Patrimônio")
+        ax5.set_title("Top 10 Máquinas com Mais Chamados")
+        ax5.invert_yaxis()  # Inverte o eixo Y para a maior ficar em cima
+        st.pyplot(fig5)
