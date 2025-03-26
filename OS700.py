@@ -507,7 +507,7 @@ def relatorios_page():
         df_period.drop(columns=["dia_semana_en"], inplace=True)
 
         chamados_por_dia = df_period.groupby("dia_semana").size().reset_index(name="qtd")
-        st.markdown("#### Chamados por Dia da Semana (em português)")
+        st.markdown("#### Chamados por Dia da Semana ")
         st.dataframe(chamados_por_dia)
 
     chamados_ubs_mes = df_period.groupby(["ubs", "mes"]).size().reset_index(name="qtd_chamados")
