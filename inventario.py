@@ -143,7 +143,7 @@ def cadastro_maquina():
     """
     st.subheader("Cadastrar Máquina no Inventário")
 
-    tipo_options = ["Computador", "Impressora", "Monitor", "Outro"]
+    tipo_options = ["Computador", "Impressora", "Monitor", "Nobreak", "Estabilizador", "Outro"]
     tipo = st.selectbox("Tipo de Equipamento", tipo_options)
 
     marca = st.text_input("Marca")
