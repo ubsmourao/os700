@@ -21,13 +21,14 @@ from chamados import (
     list_chamados_em_aberto,
     buscar_no_inventario_por_patrimonio,
     finalizar_chamado,
-    calculate_working_hours
+    calculate_working_hours,
+    reabrir_chamado
 )
 from inventario import (
-    show_inventory_list,   # <-- Listagem com filtros e edição
-    cadastro_maquina,      # <-- Cadastro de máquina
-    dashboard_inventario,  # <-- Dashboard do inventário
-    get_machines_from_inventory
+    show_inventory_list,
+    cadastro_maquina,
+    get_machines_from_inventory,
+    dashboard_inventario
 )
 from ubs import get_ubs_list
 from setores import get_setores_list
@@ -45,7 +46,6 @@ if "username" not in st.session_state:
 # Configuração da página
 st.set_page_config(page_title="Gestão de Parque de Informática", layout="wide")
 
-# Verifica se existe logotipo no caminho
 logo_path = os.getenv("LOGO_PATH", "infocustec.png")
 if os.path.exists(logo_path):
     st.image(logo_path, width=300)
@@ -54,9 +54,7 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-####################################
-# Função Auxiliar para Exibir Chamado
-####################################
+# --- Função Auxiliar para Exibir Chamado ---
 def exibir_chamado(chamado):
     st.markdown("### Detalhes do Chamado")
     col1, col2 = st.columns(2)
@@ -75,9 +73,7 @@ def exibir_chamado(chamado):
         st.markdown("### Solução")
         st.markdown(chamado["solucao"])
 
-####################################
-# Construção do Menu Principal
-####################################
+# Monta o menu principal
 def build_menu():
     if st.session_state["logged_in"]:
         if is_admin(st.session_state["username"]):
@@ -103,8 +99,6 @@ def build_menu():
         return ["Login"]
 
 menu_options = build_menu()
-
-# Menu horizontal
 selected = option_menu(
     menu_title=None,
     options=menu_options,
@@ -130,9 +124,9 @@ selected = option_menu(
     }
 )
 
-####################################
+###########################
 # 1) Página de Login
-####################################
+###########################
 def login_page():
     st.subheader("Login")
     username = st.text_input("Usuário")
@@ -147,9 +141,9 @@ def login_page():
         else:
             st.error("Usuário ou senha incorretos.")
 
-####################################
+###########################
 # 2) Página de Dashboard
-####################################
+###########################
 def dashboard_page():
     st.subheader("Dashboard - Administrativo")
     agora_fortaleza = datetime.now(FORTALEZA_TZ)
@@ -162,7 +156,7 @@ def dashboard_page():
     col1.metric("Total de Chamados", total_chamados)
     col2.metric("Chamados Abertos", abertos)
     
-    # Identifica chamados atrasados (48h úteis)
+    # Identifica chamados atrasados (+48h úteis)
     atrasados = []
     if chamados:
         for c in chamados:
@@ -194,9 +188,9 @@ def dashboard_page():
     else:
         st.write("Nenhum chamado registrado.")
 
-####################################
+###########################
 # 3) Página de Abrir Chamado
-####################################
+###########################
 def abrir_chamado_page():
     st.subheader("Abrir Chamado Técnico")
     patrimonio = st.text_input("Número de Patrimônio (opcional)")
@@ -236,10 +230,8 @@ def abrir_chamado_page():
         ]
     else:
         defect_options = ["Solicitação de suporte geral", "Outros tipos de defeito"]
-
     tipo_defeito = st.selectbox("Tipo de Defeito/Solicitação", defect_options)
     problema = st.text_area("Descreva o problema ou solicitação")
-
     if st.button("Abrir Chamado"):
         agendamento = data_agendada.strftime('%d/%m/%Y') if data_agendada else None
         protocolo = add_chamado(
@@ -255,9 +247,9 @@ def abrir_chamado_page():
         else:
             st.error("Erro ao abrir chamado.")
 
-####################################
+###########################
 # 4) Página de Buscar Chamado
-####################################
+###########################
 def buscar_chamado_page():
     st.subheader("Buscar Chamado")
     protocolo = st.text_input("Informe o número de protocolo do chamado")
@@ -272,9 +264,9 @@ def buscar_chamado_page():
         else:
             st.warning("Informe um protocolo.")
 
-####################################
-# 5) Página de Chamados Técnicos
-####################################
+###########################
+# 5) Página de Chamados Técnicos (inclui finalizar e reabrir)
+###########################
 def chamados_tecnicos_page():
     st.subheader("Chamados Técnicos")
     chamados = list_chamados()
@@ -311,6 +303,7 @@ def chamados_tecnicos_page():
         fit_columns_on_grid_load=True
     )
     
+    # Finalizar Chamado (para chamados em aberto)
     df_aberto = df[df["hora_fechamento"].isnull()]
     if df_aberto.empty:
         st.write("Não há chamados abertos para finalizar.")
@@ -347,16 +340,19 @@ def chamados_tecnicos_page():
             else:
                 st.error("Informe a solução para finalizar o chamado.")
 
-####################################
-# 6) Página de Inventário (sem Edição em Massa)
-####################################
+    # Reabrir Chamado (para chamados fechados)
+    df_fechado = df[df["hora_fechamento"].notnull()]
+    if not df_fechado.empty:
+        st.markdown("### Reabrir Chamado Técnico")
+        chamado_fechado_id = st.selectbox("Selecione o ID do chamado para reabrir", df_fechado["id"].tolist())
+        remover_hist = st.checkbox("Remover registro de manutenção criado no fechamento anterior?", value=False)
+        if st.button("Reabrir Chamado"):
+            reabrir_chamado(chamado_fechado_id, remover_historico=remover_hist)
+
+###########################
+# 6) Página de Inventário
+###########################
 def inventario_page():
-    """
-    Sub-opções:
-      1) Listar Inventário (com filtros)
-      2) Cadastrar Máquina
-      3) Dashboard Inventário
-    """
     st.subheader("Inventário")
     menu_inventario = st.radio("Selecione uma opção:", [
         "Listar Inventário",
@@ -366,22 +362,20 @@ def inventario_page():
 
     if menu_inventario == "Listar Inventário":
         show_inventory_list()
-
     elif menu_inventario == "Cadastrar Máquina":
         cadastro_maquina()
-
-    elif menu_inventario == "Dashboard Inventário":
+    else:
         dashboard_inventario()
 
-####################################
+###########################
 # 7) Página de Estoque
-####################################
+###########################
 def estoque_page():
     manage_estoque()
 
-####################################
+###########################
 # 8) Página de Administração
-####################################
+###########################
 def administracao_page():
     st.subheader("Administração")
     admin_option = st.selectbox("Opções de Administração", [
@@ -412,9 +406,9 @@ def administracao_page():
         else:
             st.write("Nenhum usuário cadastrado.")
 
-####################################
+###########################
 # 9) Página de Relatórios
-####################################
+###########################
 def relatorios_page():
     st.subheader("Relatórios Completos - Estatísticas")
     st.markdown("### Filtros para Chamados")
@@ -480,6 +474,7 @@ def relatorios_page():
     else:
         st.write("Nenhum chamado finalizado no período para calcular tempo médio de resolução.")
 
+    # Exemplo: Chamados por tipo de defeito
     if "tipo_defeito" in df_period.columns:
         chamados_tipo = df_period.groupby("tipo_defeito").size().reset_index(name="qtd")
         st.markdown("#### Chamados por Tipo de Defeito")
@@ -496,10 +491,23 @@ def relatorios_page():
     st.markdown("#### Chamados por UBS e Setor")
     st.dataframe(chamados_ubs_setor)
 
+    # Dia da semana em português (opcional)
     if not df_period.empty:
-        df_period["dia_semana"] = df_period["hora_abertura_dt"].dt.day_name()
+        df_period["dia_semana_en"] = df_period["hora_abertura_dt"].dt.day_name()
+        day_map = {
+            'Monday': 'Segunda-feira',
+            'Tuesday': 'Terça-feira',
+            'Wednesday': 'Quarta-feira',
+            'Thursday': 'Quinta-feira',
+            'Friday': 'Sexta-feira',
+            'Saturday': 'Sábado',
+            'Sunday': 'Domingo'
+        }
+        df_period["dia_semana"] = df_period["dia_semana_en"].map(day_map)
+        df_period.drop(columns=["dia_semana_en"], inplace=True)
+
         chamados_por_dia = df_period.groupby("dia_semana").size().reset_index(name="qtd")
-        st.markdown("#### Chamados por Dia da Semana")
+        st.markdown("#### Chamados por Dia da Semana (em português)")
         st.dataframe(chamados_por_dia)
 
     chamados_ubs_mes = df_period.groupby(["ubs", "mes"]).size().reset_index(name="qtd_chamados")
@@ -566,9 +574,9 @@ def relatorios_page():
             mime="application/pdf"
         )
 
-####################################
+###########################
 # 10) Página de Exportar Dados
-####################################
+###########################
 def exportar_dados_page():
     st.subheader("Exportar Dados")
     st.markdown("### Exportar Chamados em CSV")
@@ -589,17 +597,15 @@ def exportar_dados_page():
     else:
         st.write("Nenhum item de inventário para exportar.")
 
-####################################
+###########################
 # 11) Página de Sair
-####################################
+###########################
 def sair_page():
     st.session_state["logged_in"] = False
     st.session_state["username"] = ""
     st.success("Você saiu.")
 
-####################################
-# Mapeamento das Páginas
-####################################
+# Mapeamento das páginas
 pages = {
     "Login": login_page,
     "Dashboard": dashboard_page,
@@ -607,19 +613,18 @@ pages = {
     "Buscar Chamado": buscar_chamado_page,
     "Chamados Técnicos": chamados_tecnicos_page,
     "Inventário": inventario_page,
-    "Estoque": manage_estoque,
+    "Estoque": estoque_page,
     "Administração": administracao_page,
     "Relatórios": relatorios_page,
     "Exportar Dados": exportar_dados_page,
     "Sair": sair_page,
 }
 
-# Roteamento do menu
 if selected in pages:
     pages[selected]()
 else:
     st.write("Página não encontrada.")
-    # No final do seu arquivo principal
 
-st.markdown("---")  # Linha horizontal (opcional)
-st.markdown("© 2025 **Infocustec**. Todos os direitos reservados.", unsafe_allow_html=True)
+# Rodapé ou direitos autorais (opcional)
+st.markdown("---")
+st.markdown("© 2025 Infocustec. Todos os direitos reservados.")
