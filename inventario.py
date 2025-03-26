@@ -483,7 +483,7 @@ def dashboard_inventario():
 
             # Faz pivot para ter colunas: Computador, Impressora
             pivot_ubs = group_ubs.pivot(index="localizacao", columns="tipo", values="quantidade").fillna(0)
-
+            pivot_ubs = pivot_ubs.fillna(0).astype(int)
             st.markdown("#### Tabela por UBS (linhas) e Tipo (colunas)")
             st.table(pivot_ubs)
 
