@@ -320,8 +320,16 @@ def chamados_tecnicos_page():
             ]
         else:
             solucao_options = [
-                "Reinicialização do sistema", "Atualização de drivers/software",
-                "Substituição de componente (ex.: HD, memória)", "Verificação de vírus/malware"
+                "Reinicialização do sistema",
+    "Atualização de drivers/software",
+    "Substituição de componente (ex.: SSD, Fonte, Memória)",
+    "Verificação de vírus/malware",
+    "Limpeza física e manutenção preventiva",
+    "Reinstalação do sistema operacional",
+    "Atualização do BIOS/firmware",
+    "Verificação e limpeza de superaquecimento",
+    "Otimização de configurações do sistema",
+    "Reset da BIOS"
             ]
 
         solucao_selecionada = st.selectbox("Selecione a solução", solucao_options)
