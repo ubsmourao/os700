@@ -6,6 +6,7 @@ import base64  # Para manipular a imagem em base64
 import pytz
 from datetime import datetime
 from st_aggrid import AgGrid, GridOptionsBuilder
+import matplotlib.pyplot as plt
 
 from supabase_client import supabase
 from setores import get_setores_list
@@ -134,7 +135,7 @@ def get_historico_manutencao_por_patrimonio(patrimonio):
         return []
 
 ###########################
-# 4. Cadastro de Máquina (com foto opcional)
+# 4. Cadastro de Máquina
 ###########################
 
 def cadastro_maquina():
@@ -192,7 +193,7 @@ def cadastro_maquina():
             st.write(e)
 
 ###########################
-# 5. Mostrar Inventário (com edição, foto, histórico) + Filtros
+# 5. Mostrar Inventário (com filtros e edição)
 ###########################
 
 def show_inventory_list():
@@ -408,24 +409,24 @@ def show_inventory_list():
 
 def dashboard_inventario():
     """
-    Exemplo de painel simples do inventário: conta quantas máquinas em cada status,
-    mostra distribuição por tipo, por UBS/Setor e máquinas com mais chamados.
+    Exemplo de painel do inventário que inclui:
+      - Distribuição por Status
+      - Distribuição por Tipo
+      - Distribuição por UBS (apenas Computador e Impressora)
+      - Distribuição por Setor (sem mês)
+      - Máquinas com mais chamados
     """
     st.subheader("Dashboard do Inventário")
 
-    # Carrega dados do inventário
     data = get_machines_from_inventory()
     if not data:
         st.info("Nenhum item no inventário.")
         return
     df = pd.DataFrame(data)
 
-    # Carrega dados de chamados para cruzar (máquinas mais problemáticas)
     from chamados import list_chamados
     chamados = list_chamados() or []
     df_chamados = pd.DataFrame(chamados)
-
-    import matplotlib.pyplot as plt
 
     #################################################
     # 1) Distribuição por Status
@@ -447,7 +448,7 @@ def dashboard_inventario():
         st.warning("Coluna 'status' não encontrada no inventário.")
 
     #################################################
-    # 2) Distribuição por Tipo de Equipamento
+    # 2) Distribuição por Tipo
     #################################################
     if "tipo" in df.columns:
         st.markdown("### 2) Distribuição por Tipo de Equipamento")
@@ -467,28 +468,33 @@ def dashboard_inventario():
         st.warning("Coluna 'tipo' não encontrada no inventário.")
 
     #################################################
-    # 3) Distribuição por UBS (Localização) e Setor
+    # 3) Distribuição por UBS (somente Computador e Impressora)
     #################################################
-    # Localização
     if "localizacao" in df.columns:
-        st.markdown("### 3) Distribuição por UBS (Localização)")
-        ubs_count = df["localizacao"].value_counts().reset_index()
-        ubs_count.columns = ["localizacao", "quantidade"]
+        st.markdown("### 3) Distribuição por UBS (apenas Computador e Impressora)")
+        # Filtra somente Computador e Impressora
+        df_ubs = df[df["tipo"].isin(["Computador", "Impressora"])]
+        if df_ubs.empty:
+            st.write("Nenhum Computador ou Impressora encontrado no inventário.")
+        else:
+            ubs_count = df_ubs["localizacao"].value_counts().reset_index()
+            ubs_count.columns = ["localizacao", "quantidade"]
+            st.table(ubs_count)
 
-        st.table(ubs_count)
-
-        fig3, ax3 = plt.subplots()
-        ax3.barh(ubs_count["localizacao"], ubs_count["quantidade"], color="orange")
-        ax3.set_xlabel("Quantidade")
-        ax3.set_ylabel("UBS (Localização)")
-        ax3.set_title("Distribuição por UBS (Localização)")
-        st.pyplot(fig3)
+            fig3, ax3 = plt.subplots()
+            ax3.barh(ubs_count["localizacao"], ubs_count["quantidade"], color="orange")
+            ax3.set_xlabel("Quantidade")
+            ax3.set_ylabel("UBS (Localização)")
+            ax3.set_title("Computadores e Impressoras por UBS")
+            st.pyplot(fig3)
     else:
         st.warning("Coluna 'localizacao' não encontrada no inventário.")
 
-    # Setor
+    #################################################
+    # 4) Distribuição por Setor (sem mês)
+    #################################################
     if "setor" in df.columns:
-        st.markdown("#### Distribuição por Setor")
+        st.markdown("### 4) Distribuição por Setor")
         setor_count = df["setor"].value_counts().reset_index()
         setor_count.columns = ["setor", "quantidade"]
 
@@ -504,10 +510,9 @@ def dashboard_inventario():
         st.warning("Coluna 'setor' não encontrada no inventário.")
 
     #################################################
-    # 4) Máquinas com Mais Chamados (Top 10)
+    # 5) Máquinas com Mais Chamados (Top 10)
     #################################################
-    st.markdown("### 4) Máquinas com Mais Chamados")
-
+    st.markdown("### 5) Máquinas com Mais Chamados (Top 10)")
     if df_chamados.empty:
         st.info("Não há chamados registrados para cruzar com o inventário.")
     else:
