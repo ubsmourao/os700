@@ -471,7 +471,7 @@ def dashboard_inventario():
     # 3) Distribuição por UBS (Computadores e Impressoras, separados)
     #################################################
     if "localizacao" in df.columns and "tipo" in df.columns:
-        st.markdown("### 3) Distribuição por UBS (Computadores e Impressoras, separados)")
+        st.markdown("### 3) Distribuição por UBS ")
 
         # Filtra somente Computador e Impressora
         df_ubs = df[df["tipo"].isin(["Computador", "Impressora"])]
@@ -484,7 +484,7 @@ def dashboard_inventario():
             # Faz pivot para ter colunas: Computador, Impressora
             pivot_ubs = group_ubs.pivot(index="localizacao", columns="tipo", values="quantidade").fillna(0)
             pivot_ubs = pivot_ubs.fillna(0).astype(int)
-            st.markdown("#### Tabela por UBS (linhas) e Tipo (colunas)")
+            st.markdown("#### Tabela por UBS e Tipo ")
             st.table(pivot_ubs)
 
             # Faz um gráfico de barras lado a lado (stacked=False)
@@ -492,7 +492,7 @@ def dashboard_inventario():
             pivot_ubs.plot(kind="bar", ax=ax3, stacked=False)
             ax3.set_xlabel("UBS (Localização)")
             ax3.set_ylabel("Quantidade")
-            ax3.set_title("Computadores e Impressoras por UBS (Separados)")
+            ax3.set_title("Computadores e Impressoras por UBS")
             plt.xticks(rotation=45, ha="right")
             st.pyplot(fig3)
     else:
