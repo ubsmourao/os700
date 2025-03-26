@@ -80,10 +80,8 @@ def finalizar_chamado(id_chamado, solucao, pecas_usadas=None):
     Também insere as peças usadas e registra histórico de manutenção.
     """
     try:
-        # Hora local de Fortaleza
         hora_fechamento_local = datetime.now(FORTALEZA_TZ).strftime('%d/%m/%Y %H:%M:%S')
 
-        # Atualiza o chamado com a solução e a hora de fechamento
         supabase.table("chamados").update({
             "solucao": solucao,
             "hora_fechamento": hora_fechamento_local
@@ -102,11 +100,9 @@ def finalizar_chamado(id_chamado, solucao, pecas_usadas=None):
                     "peca_nome": peca,
                     "data_uso": hora_fechamento_local
                 }).execute()
-                # Dar baixa no estoque
                 from estoque import dar_baixa_estoque
                 dar_baixa_estoque(peca, quantidade_usada=1)
         
-        # Busca o patrimônio vinculado ao chamado para registrar histórico de manutenção
         resp = supabase.table("chamados").select("patrimonio").eq("id", id_chamado).execute()
         if resp.data and len(resp.data) > 0:
             patrimonio = resp.data[0].get("patrimonio")
@@ -178,30 +174,69 @@ def calculate_working_hours(start, end):
             current = datetime.combine(current.date() + timedelta(days=1), datetime.min.time())
             continue
 
-        # Definição de horários
         morning_start = current.replace(hour=8, minute=0, second=0, microsecond=0)
         morning_end = current.replace(hour=12, minute=0, second=0, microsecond=0)
         afternoon_start = current.replace(hour=13, minute=0, second=0, microsecond=0)
         afternoon_end = current.replace(hour=17, minute=0, second=0, microsecond=0)
 
-        # Manhã
         if end > morning_start:
             interval_start = max(current, morning_start)
             interval_end = min(end, morning_end)
             if interval_end > interval_start:
                 total_seconds += (interval_end - interval_start).total_seconds()
         
-        # Tarde
         if end > afternoon_start:
             interval_start = max(current, afternoon_start)
             interval_end = min(end, afternoon_end)
             if interval_end > interval_start:
                 total_seconds += (interval_end - interval_start).total_seconds()
         
-        # Avança para o próximo dia, 00:00
         current = datetime.combine(current.date() + timedelta(days=1), datetime.min.time())
     
     return timedelta(seconds=total_seconds)
+
+###########################
+# Função para reabrir chamado
+###########################
+def reabrir_chamado(id_chamado, remover_historico=False):
+    """
+    Reabre um chamado que foi finalizado, removendo hora_fechamento e solucao.
+    Se remover_historico=True, também apaga o registro de manutencao
+    referente à data de fechamento anterior (se quiser).
+    """
+    try:
+        # 1) Busca dados do chamado
+        resp = supabase.table("chamados").select("*").eq("id", id_chamado).execute()
+        if not resp.data:
+            st.error("Chamado não encontrado.")
+            return
+        chamado = resp.data[0]
+
+        # Verifica se realmente está fechado
+        if not chamado.get("hora_fechamento"):
+            st.info("Chamado já está em aberto.")
+            return
+
+        old_hora_fechamento = chamado["hora_fechamento"]
+        patrimonio = chamado.get("patrimonio")
+
+        # 2) Atualiza hora_fechamento e solucao para None
+        supabase.table("chamados").update({
+            "hora_fechamento": None,
+            "solucao": None
+        }).eq("id", id_chamado).execute()
+
+        # 3) Se remover_historico=True, remove o registro no historico_manutencao
+        # que tenha data_manutencao == old_hora_fechamento (caso tenha sido criado ao finalizar)
+        if remover_historico and patrimonio and old_hora_fechamento:
+            supabase.table("historico_manutencao").delete() \
+                .eq("numero_patrimonio", patrimonio) \
+                .eq("data_manutencao", old_hora_fechamento) \
+                .execute()
+
+        st.success(f"Chamado {id_chamado} reaberto com sucesso!")
+    except Exception as e:
+        st.error(f"Erro ao reabrir chamado: {e}")
 
 if __name__ == "__main__":
     st.write("Módulo de Chamados - Supabase - Hora Local de Fortaleza")
