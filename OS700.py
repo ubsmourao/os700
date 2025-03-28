@@ -545,8 +545,8 @@ def relatorios_page():
         pdf.set_font("Arial", "", 10)
     # Itera sobre todas as linhas e colunas do DataFrame exibido na tela
         for idx, row in df_chamados.iterrows():
-        for col in df_chamados.columns:
-            pdf.cell(0, 8, f"{col}: {row[col]}", ln=True)
+            for col in df_chamados.columns:
+                pdf.cell(0, 8, f"{col}: {row[col]}", ln=True)
         pdf.ln(5)
         pdf_output = pdf.output(dest="S")
     if isinstance(pdf_output, str):
