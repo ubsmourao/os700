@@ -550,7 +550,7 @@ def relatorios_page():
         pdf.ln(5)
         pdf_output = pdf.output(dest="S")
         if isinstance(pdf_output, str):
-        pdf_output = pdf_output.encode("latin-1")
+            pdf_output = pdf_output.encode("latin-1")
         st.download_button(
             label="Baixar Relatório Completo de Chamados",
             data=pdf_output,
