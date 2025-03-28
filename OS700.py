@@ -532,57 +532,32 @@ def relatorios_page():
     plt.xticks(rotation=45)
     st.pyplot(fig1)
 
-    if st.button("Gerar Relatório de Chamados em PDF"):
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.image("infocustec.png", x=10, y=8, w=30)
-        pdf.ln(35)
-
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 10, "Relatório de Chamados - Gestão de Parque de Informática", ln=True, align="C")
-        pdf.ln(10)
-        pdf.set_font("Arial", "", 12)
-        pdf.cell(0, 10, f"Período: {start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')}", ln=True)
-        if filtro_ubs:
-            pdf.cell(0, 10, f"UBS: {', '.join(filtro_ubs)}", ln=True)
+    if st.button("Gerar Relatório Completo de Chamados em PDF"):
+    pdf = FPDF()
+    pdf.add_page()
+    # Insere a logo (ajuste o caminho e tamanho conforme necessário)
+    pdf.image("infocustec.png", x=10, y=8, w=30)
+    pdf.ln(35)
+    
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, "Relatório Completo de Chamados Técnicos", ln=True, align="C")
+    pdf.ln(10)
+    pdf.set_font("Arial", "", 10)
+    # Itera sobre todas as linhas e colunas do DataFrame exibido na tela
+    for idx, row in df_chamados.iterrows():
+        for col in df_chamados.columns:
+            pdf.cell(0, 8, f"{col}: {row[col]}", ln=True)
         pdf.ln(5)
+    pdf_output = pdf.output(dest="S")
+    if isinstance(pdf_output, str):
+        pdf_output = pdf_output.encode("latin-1")
+    st.download_button(
+        label="Baixar Relatório Completo de Chamados",
+        data=pdf_output,
+        file_name="relatorio_chamados_completo.pdf",
+        mime="application/pdf"
+    )
 
-        pdf.cell(0, 10, "Chamados por UBS por Mês:", ln=True)
-        for idx, row in chamados_ubs_mes.iterrows():
-            pdf.cell(0, 8, f"UBS: {row['ubs']} | Mês: {row['mes']} | Qtd: {row['qtd_chamados']}", ln=True)
-        pdf.ln(5)
-
-        pdf.cell(0, 10, "Chamados por Setor:", ln=True)
-        for idx, row in chamados_ubs_setor.iterrows():
-            pdf.cell(0, 8, f"UBS: {row['ubs']} | Setor: {row['setor']} | Qtd: {row['qtd_chamados']}", ln=True)
-        pdf.ln(5)
-
-        if "tipo_defeito" in df_period.columns:
-            pdf.cell(0, 10, "Chamados por Tipo de Defeito:", ln=True)
-            for idx, row in chamados_tipo.iterrows():
-                pdf.cell(0, 8, f"{row['tipo_defeito']}: {row['qtd']}", ln=True)
-            pdf.ln(5)
-
-        df_finalizados = df_period.dropna(subset=["tempo_resolucao_seg"])
-        if not df_finalizados.empty:
-            pdf.cell(0, 10, "Tempo Médio de Resolução (horas úteis):", ln=True)
-            media_seg = df_finalizados["tempo_resolucao_seg"].mean()
-            horas = int(media_seg // 3600)
-            minutos = int((media_seg % 3600) // 60)
-            pdf.cell(0, 8, f"{horas}h {minutos}m", ln=True)
-
-        pdf_output = pdf.output(dest="S")
-        if isinstance(pdf_output, bytearray):
-            pdf_output = bytes(pdf_output)
-        elif isinstance(pdf_output, str):
-            pdf_output = pdf_output.encode("latin-1")
-
-        st.download_button(
-            label="Baixar Relatório de Chamados em PDF",
-            data=pdf_output,
-            file_name="relatorio_chamados.pdf",
-            mime="application/pdf"
-        )
 
 ###########################
 # 10) Página de Exportar Dados
