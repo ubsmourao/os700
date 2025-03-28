@@ -558,7 +558,7 @@ def relatorios_page():
                 pdf.cell(0, 8, f"{col}: {str(row[col])}", ln=True)
             pdf.ln(5)
         pdf_output = pdf.output(dest="S")
-        if not isinstance(pdf_output, bytes):
+        if isinstance(pdf_output, bytes):
             pdf_output = pdf_output.encode("latin-1")
         st.download_button(
             label="Baixar Relatório Completo de Chamados",
