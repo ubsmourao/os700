@@ -547,7 +547,7 @@ def relatorios_page():
         for idx, row in df_chamados.iterrows():
             for col in df_chamados.columns:
                 pdf.cell(0, 8, f"{col}: {row[col]}", ln=True)
-        pdf.ln(5)
+            pdf.ln(5)
         pdf_output = pdf.output(dest="S")
         if isinstance(pdf_output, str):
             pdf_output = pdf_output.encode("latin-1")
