@@ -13,7 +13,7 @@ import pytz
 # Define o fuso horário de Fortaleza
 FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
 
-# Módulos internos
+# Importação dos módulos internos
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
     add_chamado,
@@ -235,6 +235,7 @@ def abrir_chamado_page():
         ]
     else:
         defect_options = ["Solicitação de suporte geral", "Outros tipos de defeito"]
+
     tipo_defeito = st.selectbox("Tipo de Defeito/Solicitação", defect_options)
     problema = st.text_area("Descreva o problema ou solicitação")
     if st.button("Abrir Chamado"):
@@ -295,13 +296,13 @@ def chamados_tecnicos_page():
 
     df["Tempo Util"] = df.apply(calcula_tempo, axis=1)
 
-    # Reordena as colunas para que "Tempo Util" fique logo após "patrimonio"
+    # Reordena para que "Tempo Util" apareça logo após "patrimonio"
     if "patrimonio" in df.columns:
         cols = list(df.columns)
         if "Tempo Util" in cols:
             cols.remove("Tempo Util")
         idx = cols.index("patrimonio")
-        cols.insert(idx + 1, "Tempo Util")
+        cols.insert(idx+1, "Tempo Util")
         df = df[cols]
 
     gb = GridOptionsBuilder.from_dataframe(df)
@@ -329,7 +330,8 @@ def chamados_tecnicos_page():
             ]
         else:
             solucao_options = [
-                "Reinicialização do sistema", "Atualização de drivers/software",
+                "Reinicialização do sistema",
+                "Atualização de drivers/software",
                 "Substituição de componente (ex.: SSD, Fonte, Memória)",
                 "Verificação de vírus/malware",
                 "Limpeza física e manutenção preventiva",
@@ -501,11 +503,12 @@ def relatorios_page():
         plt.xticks(rotation=45, ha="right")
         st.pyplot(fig_tipo)
 
+    # Chamados por UBS e Setor
     chamados_ubs_setor = df_period.groupby(["ubs", "setor"]).size().reset_index(name="qtd_chamados")
     st.markdown("#### Chamados por UBS e Setor")
     st.dataframe(chamados_ubs_setor)
 
-    # Dia da semana em português
+    # Chamados por Dia da Semana (em português)
     if not df_period.empty:
         df_period["dia_semana_en"] = df_period["hora_abertura_dt"].dt.day_name()
         day_map = {
@@ -519,11 +522,11 @@ def relatorios_page():
         }
         df_period["dia_semana"] = df_period["dia_semana_en"].map(day_map)
         df_period.drop(columns=["dia_semana_en"], inplace=True)
-
         chamados_por_dia = df_period.groupby("dia_semana").size().reset_index(name="qtd")
         st.markdown("#### Chamados por Dia da Semana")
         st.dataframe(chamados_por_dia)
 
+    # Chamados por UBS por Mês
     chamados_ubs_mes = df_period.groupby(["ubs", "mes"]).size().reset_index(name="qtd_chamados")
     st.markdown("#### Chamados por UBS por Mês")
     st.dataframe(chamados_ubs_mes)
@@ -538,10 +541,9 @@ def relatorios_page():
     plt.xticks(rotation=45)
     st.pyplot(fig1)
 
-    # Geração do PDF completo de chamados
+    # Geração do PDF completo de chamados com todas as informações
     if st.button("Gerar Relatório Completo de Chamados em PDF"):
-        # Para garantir que o DataFrame usado no PDF contenha todos os dados exibidos,
-        # copiamos o DataFrame filtrado
+        # Cria uma cópia do DataFrame filtrado para garantir que todas as informações estejam presentes
         df_chamados = df_period.copy()
         pdf = FPDF()
         pdf.add_page()
@@ -558,10 +560,10 @@ def relatorios_page():
                 pdf.cell(0, 8, f"{col}: {str(row[col])}", ln=True)
             pdf.ln(5)
         pdf_output = pdf.output(dest="S")
-        if isinstance(pdf_output, bytearray):
-            pdf_output = bytes(pdf_output)
-        elif isinstance(pdf_output, str):
+        if isinstance(pdf_output, str):
             pdf_output = pdf_output.encode("latin-1")
+        elif isinstance(pdf_output, bytearray):
+            pdf_output = bytes(pdf_output)
         st.download_button(
             label="Baixar Relatório Completo de Chamados",
             data=pdf_output,
@@ -569,9 +571,9 @@ def relatorios_page():
             mime="application/pdf"
         )
 
-###########################
+####################################
 # 10) Página de Exportar Dados
-###########################
+####################################
 def exportar_dados_page():
     st.subheader("Exportar Dados")
     st.markdown("### Exportar Chamados em CSV")
@@ -592,9 +594,9 @@ def exportar_dados_page():
     else:
         st.write("Nenhum item de inventário para exportar.")
 
-###########################
+####################################
 # 11) Página de Sair
-###########################
+####################################
 def sair_page():
     st.session_state["logged_in"] = False
     st.session_state["username"] = ""
