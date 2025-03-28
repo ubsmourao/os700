@@ -533,22 +533,22 @@ def relatorios_page():
     st.pyplot(fig1)
 
     if st.button("Gerar Relatório Completo de Chamados em PDF"):
-    pdf = FPDF()
-    pdf.add_page()
+        pdf = FPDF()
+        pdf.add_page()
     # Insere a logo (ajuste o caminho e tamanho conforme necessário)
-    pdf.image("infocustec.png", x=10, y=8, w=30)
-    pdf.ln(35)
+        pdf.image("infocustec.png", x=10, y=8, w=30)
+        pdf.ln(35)
     
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "Relatório Completo de Chamados Técnicos", ln=True, align="C")
-    pdf.ln(10)
-    pdf.set_font("Arial", "", 10)
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(0, 10, "Relatório Completo de Chamados Técnicos", ln=True, align="C")
+        pdf.ln(10)
+        pdf.set_font("Arial", "", 10)
     # Itera sobre todas as linhas e colunas do DataFrame exibido na tela
-    for idx, row in df_chamados.iterrows():
+        for idx, row in df_chamados.iterrows():
         for col in df_chamados.columns:
             pdf.cell(0, 8, f"{col}: {row[col]}", ln=True)
         pdf.ln(5)
-    pdf_output = pdf.output(dest="S")
+        pdf_output = pdf.output(dest="S")
     if isinstance(pdf_output, str):
         pdf_output = pdf_output.encode("latin-1")
     st.download_button(
