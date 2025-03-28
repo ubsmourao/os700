@@ -572,7 +572,9 @@ def relatorios_page():
             pdf.cell(0, 8, f"{horas}h {minutos}m", ln=True)
 
         pdf_output = pdf.output(dest="S")
-        if isinstance(pdf_output, str):
+        if isinstance(pdf_output, bytearray):
+            pdf_output = bytes(pdf_output)
+        elif isinstance(pdf_output, str):
             pdf_output = pdf_output.encode("latin-1")
 
         st.download_button(
