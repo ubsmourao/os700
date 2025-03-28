@@ -8,9 +8,10 @@ from streamlit_option_menu import option_menu
 from fpdf import FPDF
 from st_aggrid import AgGrid, GridOptionsBuilder
 from io import BytesIO
-
 import pytz
-FORTALEZA_TZ = pytz.timezone("America/Fortaleza")  # Timezone de Fortaleza, CE
+
+# Define o fuso horário de Fortaleza
+FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
 
 # Módulos internos
 from autenticacao import authenticate, add_user, is_admin, list_users
@@ -37,7 +38,7 @@ from estoque import manage_estoque, get_estoque
 # Configuração de logging
 logging.basicConfig(level=logging.INFO)
 
-# Inicialização de sessão
+# Inicialização da sessão
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "username" not in st.session_state:
@@ -54,7 +55,9 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-# --- Função Auxiliar para Exibir Chamado ---
+####################################
+# Função Auxiliar para Exibir Chamado
+####################################
 def exibir_chamado(chamado):
     st.markdown("### Detalhes do Chamado")
     col1, col2 = st.columns(2)
@@ -73,7 +76,9 @@ def exibir_chamado(chamado):
         st.markdown("### Solução")
         st.markdown(chamado["solucao"])
 
-# Monta o menu principal
+####################################
+# Monta o Menu Principal
+####################################
 def build_menu():
     if st.session_state["logged_in"]:
         if is_admin(st.session_state["username"]):
@@ -124,9 +129,9 @@ selected = option_menu(
     }
 )
 
-###########################
+####################################
 # 1) Página de Login
-###########################
+####################################
 def login_page():
     st.subheader("Login")
     username = st.text_input("Usuário")
@@ -141,14 +146,14 @@ def login_page():
         else:
             st.error("Usuário ou senha incorretos.")
 
-###########################
+####################################
 # 2) Página de Dashboard
-###########################
+####################################
 def dashboard_page():
     st.subheader("Dashboard - Administrativo")
     agora_fortaleza = datetime.now(FORTALEZA_TZ)
     st.markdown(f"**Horário local (Fortaleza):** {agora_fortaleza.strftime('%d/%m/%Y %H:%M:%S')}")
-
+    
     chamados = list_chamados()
     total_chamados = len(chamados) if chamados else 0
     abertos = len(list_chamados_em_aberto()) if chamados else 0
@@ -156,7 +161,7 @@ def dashboard_page():
     col1.metric("Total de Chamados", total_chamados)
     col2.metric("Chamados Abertos", abertos)
     
-    # Identifica chamados atrasados (+48h úteis)
+    # Identifica chamados atrasados (mais de 48h úteis)
     atrasados = []
     if chamados:
         for c in chamados:
@@ -188,9 +193,9 @@ def dashboard_page():
     else:
         st.write("Nenhum chamado registrado.")
 
-###########################
+####################################
 # 3) Página de Abrir Chamado
-###########################
+####################################
 def abrir_chamado_page():
     st.subheader("Abrir Chamado Técnico")
     patrimonio = st.text_input("Número de Patrimônio (opcional)")
@@ -247,9 +252,9 @@ def abrir_chamado_page():
         else:
             st.error("Erro ao abrir chamado.")
 
-###########################
+####################################
 # 4) Página de Buscar Chamado
-###########################
+####################################
 def buscar_chamado_page():
     st.subheader("Buscar Chamado")
     protocolo = st.text_input("Informe o número de protocolo do chamado")
@@ -264,9 +269,9 @@ def buscar_chamado_page():
         else:
             st.warning("Informe um protocolo.")
 
-###########################
-# 5) Página de Chamados Técnicos (inclui finalizar e reabrir)
-###########################
+####################################
+# 5) Página de Chamados Técnicos (Finalizar e Reabrir)
+####################################
 def chamados_tecnicos_page():
     st.subheader("Chamados Técnicos")
     chamados = list_chamados()
@@ -290,18 +295,22 @@ def chamados_tecnicos_page():
 
     df["Tempo Util"] = df.apply(calcula_tempo, axis=1)
 
+    # Reordena as colunas para que "Tempo Util" fique logo após "patrimonio"
+    if "patrimonio" in df.columns:
+        cols = list(df.columns)
+        if "Tempo Util" in cols:
+            cols.remove("Tempo Util")
+        idx = cols.index("patrimonio")
+        cols.insert(idx + 1, "Tempo Util")
+        df = df[cols]
+
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_default_column(filter=True, sortable=True)
     gb.configure_pagination(paginationAutoPageSize=True)
     gb.configure_grid_options(domLayout='autoHeight')
     grid_options = gb.build()
 
-    AgGrid(
-        df,
-        gridOptions=grid_options,
-        height=400,
-        fit_columns_on_grid_load=True
-    )
+    AgGrid(df, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
     
     # Finalizar Chamado (para chamados em aberto)
     df_aberto = df[df["hora_fechamento"].isnull()]
@@ -320,18 +329,16 @@ def chamados_tecnicos_page():
             ]
         else:
             solucao_options = [
-                "Reinicialização do sistema",
-    "Atualização de drivers/software",
-    "Substituição de componente (ex.: SSD, Fonte, Memória)",
-    "Verificação de vírus/malware",
-    "Limpeza física e manutenção preventiva",
-    "Reinstalação do sistema operacional",
-    "Atualização do BIOS/firmware",
-    "Verificação e limpeza de superaquecimento",
-    "Otimização de configurações do sistema",
-    "Reset da BIOS"
+                "Reinicialização do sistema", "Atualização de drivers/software",
+                "Substituição de componente (ex.: SSD, Fonte, Memória)",
+                "Verificação de vírus/malware",
+                "Limpeza física e manutenção preventiva",
+                "Reinstalação do sistema operacional",
+                "Atualização do BIOS/firmware",
+                "Verificação e limpeza de superaquecimento",
+                "Otimização de configurações do sistema",
+                "Reset da BIOS"
             ]
-
         solucao_selecionada = st.selectbox("Selecione a solução", solucao_options)
         solucao_complementar = st.text_area("Detalhes adicionais da solução (opcional)")
         solucao_final = solucao_selecionada + ((" - " + solucao_complementar) if solucao_complementar else "")
@@ -357,9 +364,9 @@ def chamados_tecnicos_page():
         if st.button("Reabrir Chamado"):
             reabrir_chamado(chamado_fechado_id, remover_historico=remover_hist)
 
-###########################
+####################################
 # 6) Página de Inventário
-###########################
+####################################
 def inventario_page():
     st.subheader("Inventário")
     menu_inventario = st.radio("Selecione uma opção:", [
@@ -367,7 +374,6 @@ def inventario_page():
         "Cadastrar Máquina",
         "Dashboard Inventário"
     ])
-
     if menu_inventario == "Listar Inventário":
         show_inventory_list()
     elif menu_inventario == "Cadastrar Máquina":
@@ -375,15 +381,15 @@ def inventario_page():
     else:
         dashboard_inventario()
 
-###########################
+####################################
 # 7) Página de Estoque
-###########################
+####################################
 def estoque_page():
     manage_estoque()
 
-###########################
+####################################
 # 8) Página de Administração
-###########################
+####################################
 def administracao_page():
     st.subheader("Administração")
     admin_option = st.selectbox("Opções de Administração", [
@@ -414,9 +420,9 @@ def administracao_page():
         else:
             st.write("Nenhum usuário cadastrado.")
 
-###########################
+####################################
 # 9) Página de Relatórios
-###########################
+####################################
 def relatorios_page():
     st.subheader("Relatórios Completos - Estatísticas")
     st.markdown("### Filtros para Chamados")
@@ -482,7 +488,7 @@ def relatorios_page():
     else:
         st.write("Nenhum chamado finalizado no período para calcular tempo médio de resolução.")
 
-    # Exemplo: Chamados por tipo de defeito
+    # Chamados por Tipo de Defeito
     if "tipo_defeito" in df_period.columns:
         chamados_tipo = df_period.groupby("tipo_defeito").size().reset_index(name="qtd")
         st.markdown("#### Chamados por Tipo de Defeito")
@@ -499,7 +505,7 @@ def relatorios_page():
     st.markdown("#### Chamados por UBS e Setor")
     st.dataframe(chamados_ubs_setor)
 
-    # Dia da semana em português (opcional)
+    # Dia da semana em português
     if not df_period.empty:
         df_period["dia_semana_en"] = df_period["hora_abertura_dt"].dt.day_name()
         day_map = {
@@ -515,7 +521,7 @@ def relatorios_page():
         df_period.drop(columns=["dia_semana_en"], inplace=True)
 
         chamados_por_dia = df_period.groupby("dia_semana").size().reset_index(name="qtd")
-        st.markdown("#### Chamados por Dia da Semana ")
+        st.markdown("#### Chamados por Dia da Semana")
         st.dataframe(chamados_por_dia)
 
     chamados_ubs_mes = df_period.groupby(["ubs", "mes"]).size().reset_index(name="qtd_chamados")
@@ -532,21 +538,24 @@ def relatorios_page():
     plt.xticks(rotation=45)
     st.pyplot(fig1)
 
+    # Geração do PDF completo de chamados
     if st.button("Gerar Relatório Completo de Chamados em PDF"):
+        # Para garantir que o DataFrame usado no PDF contenha todos os dados exibidos,
+        # copiamos o DataFrame filtrado
+        df_chamados = df_period.copy()
         pdf = FPDF()
         pdf.add_page()
-    # Insere a logo (ajuste o caminho e tamanho conforme necessário)
+        # Insere a logo
         pdf.image("infocustec.png", x=10, y=8, w=30)
         pdf.ln(35)
-    
         pdf.set_font("Arial", "B", 16)
         pdf.cell(0, 10, "Relatório Completo de Chamados Técnicos", ln=True, align="C")
         pdf.ln(10)
         pdf.set_font("Arial", "", 10)
-    # Itera sobre todas as linhas e colunas do DataFrame exibido na tela
+        # Itera sobre todas as linhas e colunas do DataFrame
         for idx, row in df_chamados.iterrows():
             for col in df_chamados.columns:
-                pdf.cell(0, 8, f"{col}: {row[col]}", ln=True)
+                pdf.cell(0, 8, f"{col}: {str(row[col])}", ln=True)
             pdf.ln(5)
         pdf_output = pdf.output(dest="S")
         if isinstance(pdf_output, str):
@@ -556,8 +565,7 @@ def relatorios_page():
             data=pdf_output,
             file_name="relatorio_chamados_completo.pdf",
             mime="application/pdf"
-    )
-
+        )
 
 ###########################
 # 10) Página de Exportar Dados
@@ -590,7 +598,9 @@ def sair_page():
     st.session_state["username"] = ""
     st.success("Você saiu.")
 
-# Mapeamento das páginas
+####################################
+# Mapeamento das Páginas
+####################################
 pages = {
     "Login": login_page,
     "Dashboard": dashboard_page,
@@ -598,7 +608,7 @@ pages = {
     "Buscar Chamado": buscar_chamado_page,
     "Chamados Técnicos": chamados_tecnicos_page,
     "Inventário": inventario_page,
-    "Estoque": estoque_page,
+    "Estoque": manage_estoque,
     "Administração": administracao_page,
     "Relatórios": relatorios_page,
     "Exportar Dados": exportar_dados_page,
@@ -610,6 +620,6 @@ if selected in pages:
 else:
     st.write("Página não encontrada.")
 
-# Rodapé ou direitos autorais (opcional)
+# Rodapé com direitos autorais
 st.markdown("---")
 st.markdown("© 2025 Infocustec. Todos os direitos reservados.")
