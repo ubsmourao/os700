@@ -278,11 +278,13 @@ def show_inventory_list():
         selected_patrimonio = None
 
     if selected_patrimonio:
-        item = df[df["numero_patrimonio"] == selected_patrimonio].iloc[0]
+        item = df[df["numero_patrimonio"] == selected_patrimonio].fillna("").iloc[0]
+
 
         # Exibe a imagem atual, se existir
         st.markdown("### Foto Atual da Máquina")
-        if item.get("image_data"):
+        if item.get("image_data") not in [None, "", "null"]:
+
             current_image = base64.b64decode(item["image_data"])
             st.image(current_image, caption=f"Foto da máquina {selected_patrimonio}")
         else:
