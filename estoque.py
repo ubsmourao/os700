@@ -126,5 +126,3 @@ def manage_estoque():
         else:
             st.write("Estoque vazio para remoção.")
 
-if __name__ == "__main__":
-    manage_estoque()
