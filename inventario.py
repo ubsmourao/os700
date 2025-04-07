@@ -24,6 +24,7 @@ def get_machines_from_inventory():
     """
     try:
         resp = supabase.table("inventario").select("*").execute()
+        st.write(resp)
         return resp.data if resp.data else []
     except Exception as e:
         st.error("Erro ao recuperar inventário.")
