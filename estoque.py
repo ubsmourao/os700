@@ -78,12 +78,20 @@ def dar_baixa_estoque(peca_nome, quantidade_usada=1):
 def manage_estoque():
     st.subheader("Gerenciar Estoque de Peças de Informática")
     action = st.selectbox("Ação", ["Listar", "Adicionar", "Editar", "Remover"])
+    
     if action == "Listar":
         estoque_data = get_estoque()
         if estoque_data:
+            for item in estoque_data:
+                if item.get("data_adicao"):
+                    try:
+                        item["data_adicao"] = datetime.fromisoformat(item["data_adicao"]).strftime('%d/%m/%Y %H:%M:%S')
+                    except:
+                        pass
             st.dataframe(pd.DataFrame(estoque_data))
         else:
             st.write("Estoque vazio.")
+
     elif action == "Adicionar":
         nome = st.text_input("Nome da Peça")
         quantidade = st.number_input("Quantidade", min_value=0, step=1)
@@ -94,6 +102,7 @@ def manage_estoque():
                 add_peca(nome, quantidade, descricao, nota_fiscal)
             else:
                 st.error("Insira o nome da peça.")
+
     elif action == "Editar":
         estoque_data = get_estoque()
         if estoque_data:
@@ -115,6 +124,7 @@ def manage_estoque():
                     update_peca(id_peca, new_values)
         else:
             st.write("Estoque vazio para edição.")
+
     elif action == "Remover":
         estoque_data = get_estoque()
         if estoque_data:
@@ -125,4 +135,3 @@ def manage_estoque():
                 delete_peca(id_peca)
         else:
             st.write("Estoque vazio para remoção.")
-
