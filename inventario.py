@@ -19,12 +19,10 @@ FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
 ###########################
 
 def get_machines_from_inventory():
-    """
-    Retorna todas as máquinas da tabela 'inventario'.
-    """
     try:
-        resp = supabase.table("inventario").select("*").execute()
-        st.write(resp)
+        resp = supabase.table("inventario").select(
+            "id,numero_patrimonio,tipo,marca,modelo,numero_serie,status,localizacao,propria_locada,setor,data_aquisicao,data_garantia_fim"
+        ).execute()
         return resp.data if resp.data else []
     except Exception as e:
         st.error("Erro ao recuperar inventário.")
