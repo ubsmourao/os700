@@ -45,12 +45,12 @@ def add_machine_to_inventory(
     tipo, marca, modelo, numero_serie, status, localizacao,
     propria_locada, patrimonio, setor,
     data_aquisicao=None, data_garantia_fim=None,
-    image_data=None
+    
 ):
     """
     Adiciona nova máquina ao inventário, incluindo data_aquisicao e data_garantia_fim
     se quiser usar controle de garantia. Ajuste o BD conforme necessidade.
-    Permite também inserir image_data (foto em base64).
+    
     """
     try:
         # Verifica se já existe esse patrimônio
@@ -70,7 +70,7 @@ def add_machine_to_inventory(
             "setor": setor,
             "data_aquisicao": data_aquisicao,
             "data_garantia_fim": data_garantia_fim,
-            "image_data": image_data  # salva a foto em base64
+            
         }
         supabase.table("inventario").insert(data).execute()
         st.success("Máquina adicionada ao inventário com sucesso!")
@@ -164,9 +164,7 @@ def cadastro_maquina():
     propria_options = ["Propria", "Locada"]
     propria_locada = st.selectbox("Própria ou Locada", propria_options)
 
-    # Upload de foto (opcional)
-    uploaded_file = st.file_uploader("Foto da máquina (opcional)", type=["png","jpg","jpeg"])
-
+    
     if st.button("Cadastrar Máquina"):
         # Se houver imagem, converte para base64
         image_data = None
@@ -185,7 +183,7 @@ def cadastro_maquina():
                 propria_locada=propria_locada,
                 patrimonio=patrimonio,
                 setor=setor,
-                image_data=image_data  # Envia a foto (em base64) para salvar
+                
             )
         except Exception as e:
             st.error("Erro ao cadastrar máquina.")
