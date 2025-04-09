@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from streamlit_option_menu import option_menu
 from fpdf import FPDF
-from st_aggrid import AgGrid, GridOptionsBuilder
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 from io import BytesIO
 import pytz
 
