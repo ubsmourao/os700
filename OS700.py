@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from streamlit_option_menu import option_menu
 from fpdf import FPDF
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+from st_aggrid import AgGrid, GridOptionsBuilder
 from io import BytesIO
 import pytz
 
@@ -308,8 +308,6 @@ def chamados_tecnicos_page():
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_default_column(filter=True, sortable=True)
     gb.configure_pagination(paginationAutoPageSize=True)
-    gb.configure_grid_options(domLayout='autoHeight', getRowStyle='''function(params) { if (!params.data.hora_fechamento) { return { background: "#ffcccc" }; } }''')
-
     grid_options = gb.build()
 
     AgGrid(df, gridOptions=grid_options, height=400, fit_columns_on_grid_load=True)
