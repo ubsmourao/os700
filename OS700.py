@@ -638,17 +638,17 @@ def sair_page():
 # Mapeamento das Páginas
 ####################################
 pages = {
-    \"Login\": login_page,
-    \"Dashboard\": dashboard_page,
-    \"Abrir Chamado\": abrir_chamado_page,
-    \"Buscar Chamado\": buscar_chamado_page,
-    \"Chamados Técnicos\": chamados_tecnicos_page,
-    \"Inventário\": inventario_page,
-    \"Estoque\": estoque_page,       # Chama a função manage_estoque ou a wrapper
-    \"Administração\": administracao_page,
-    \"Relatórios\": relatorios_page,
-    \"Exportar Dados\": exportar_dados_page,
-    \"Sair\": sair_page
+    "Login": login_page,
+    "Dashboard": dashboard_page,
+    "Abrir Chamado": abrir_chamado_page,
+    "Buscar Chamado": buscar_chamado_page,
+    "Chamados Técnicos": chamados_tecnicos_page,
+    "Inventário": inventario_page,
+    "Estoque": estoque_page,       # Chama a função manage_estoque ou a wrapper
+    "Administração": administracao_page,
+    "Relatórios": relatorios_page,
+    "Exportar Dados": exportar_dados_page,
+    "Sair": sair_page
 }
 
 # Chama a página selecionada
@@ -658,5 +658,5 @@ else:
     st.write("Página não encontrada.")
 
 # Rodapé
-st.markdown(\"---\")
-st.markdown(\"<center>© 2025 Infocustec. Todos os direitos reservados.</center>\", unsafe_allow_html=True)
+st.markdown("---")
+st.markdown("<center>© 2025 Infocustec. Todos os direitos reservados.<center>", unsafe_allow_html=True)
