@@ -1,11 +1,42 @@
-# chamados.py
+import os
 import streamlit as st
 from supabase_client import supabase
 from datetime import datetime, timedelta
 import pytz
+from twilio.rest import Client
 
 # Define o fuso de Fortaleza
 FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
+
+def send_whatsapp_message(message_body):
+    """
+    Envia a mensagem de WhatsApp para cada técnico listado na variável de ambiente
+    TECHNICIAN_WHATSAPP_NUMBER (números separados por vírgula).
+    """
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+    from_whatsapp_number = os.getenv("TWILIO_WHATSAPP_NUMBER")
+    technician_numbers = os.getenv("TECHNICIAN_WHATSAPP_NUMBER", "")
+    
+    if not all([account_sid, auth_token, from_whatsapp_number, technician_numbers]):
+        st.error("Variáveis de ambiente do Twilio não configuradas corretamente.")
+        return
+    
+    # Separa os números (supondo que estejam separados por vírgula)
+    numbers_list = [num.strip() for num in technician_numbers.split(",") if num.strip()]
+    
+    for number in numbers_list:
+        # Garante que o número esteja no formato "whatsapp:+..."
+        to_whatsapp_number = number if number.startswith("whatsapp:") else f"whatsapp:{number}"
+        try:
+            client = Client(account_sid, auth_token)
+            client.messages.create(
+                body=message_body,
+                from_=from_whatsapp_number,
+                to=to_whatsapp_number
+            )
+        except Exception as e:
+            st.error(f"Erro ao enviar mensagem para {to_whatsapp_number}: {e}")
 
 def gerar_protocolo_sequencial():
     try:
@@ -39,13 +70,13 @@ def buscar_no_inventario_por_patrimonio(patrimonio):
             }
         return None
     except Exception as e:
-        st.error(f"Erro ao buscar patrimonio: {e}")
+        st.error(f"Erro ao buscar patrimônio: {e}")
         return None
 
 def add_chamado(username, ubs, setor, tipo_defeito, problema, machine=None, patrimonio=None):
     """
-    Cria um chamado no Supabase, definindo a hora de abertura
-    com o fuso horário de Fortaleza (UTC−3).
+    Cria um chamado no Supabase, definindo a hora de abertura com fuso horário de Fortaleza (UTC−3)
+    e envia uma mensagem via WhatsApp para os técnicos.
     """
     try:
         protocolo = gerar_protocolo_sequencial()
@@ -61,12 +92,17 @@ def add_chamado(username, ubs, setor, tipo_defeito, problema, machine=None, patr
             "setor": setor,
             "tipo_defeito": tipo_defeito,
             "problema": problema,
-            "hora_abertura": hora_local,  # <-- horário local
+            "hora_abertura": hora_local,
             "protocolo": protocolo,
             "machine": machine,
             "patrimonio": patrimonio
         }
         supabase.table("chamados").insert(data).execute()
+        
+        # Envio de mensagem via WhatsApp para os técnicos
+        message_body = f"Novo chamado aberto: Protocolo {protocolo}. UBS: {ubs}. Problema: {problema}"
+        send_whatsapp_message(message_body)
+        
         st.success("Chamado aberto com sucesso!")
         return protocolo
     except Exception as e:
@@ -75,8 +111,7 @@ def add_chamado(username, ubs, setor, tipo_defeito, problema, machine=None, patr
 
 def finalizar_chamado(id_chamado, solucao, pecas_usadas=None):
     """
-    Finaliza um chamado, definindo a hora de fechamento
-    com o fuso horário de Fortaleza (UTC−3).
+    Finaliza um chamado, definindo a hora de fechamento com o fuso horário de Fortaleza (UTC−3).
     Também insere as peças usadas e registra histórico de manutenção.
     """
     try:
@@ -151,7 +186,7 @@ def get_chamados_por_patrimonio(patrimonio):
         resp = supabase.table("chamados").select("*").eq("patrimonio", patrimonio).execute()
         return resp.data if resp.data else []
     except Exception as e:
-        st.error(f"Erro ao buscar chamados para o patrimonio {patrimonio}: {e}")
+        st.error(f"Erro ao buscar chamados para o patrimônio {patrimonio}: {e}")
         return []
 
 def calculate_working_hours(start, end):
@@ -195,13 +230,10 @@ def calculate_working_hours(start, end):
     
     return timedelta(seconds=total_seconds)
 
-###########################
-# Função para reabrir chamado
-###########################
 def reabrir_chamado(id_chamado, remover_historico=False):
     """
     Reabre um chamado que foi finalizado, removendo hora_fechamento e solucao.
-    Se remover_historico=True, também apaga o registro de manutencao
+    Se remover_historico=True, também apaga o registro de manutenção
     referente à data de fechamento anterior (se quiser).
     """
     try:
