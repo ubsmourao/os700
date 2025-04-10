@@ -593,7 +593,7 @@ def relatorios_page():
             pdf.ln(5)
         pdf_output = pdf.output(dest="S")
         if isinstance(pdf_output, str):
-            pdf_output = pdf_output.encode(\"latin-1\")
+            pdf_output = pdf_output.encode("latin-1")
         elif isinstance(pdf_output, bytearray):
             pdf_output = bytes(pdf_output)
         st.download_button(
@@ -612,19 +612,19 @@ def exportar_dados_page():
     chamados = list_chamados()
     if chamados:
         df_chamados = pd.DataFrame(chamados)
-        csv_chamados = df_chamados.to_csv(index=False).encode(\"utf-8\")
+        csv_chamados = df_chamados.to_csv(index=False).encode("utf-8")
         st.download_button(\"Baixar Chamados CSV\", data=csv_chamados, file_name=\"chamados.csv\", mime=\"text/csv\")
     else:
-        st.write(\"Nenhum chamado para exportar.\")
+        st.write("Nenhum chamado para exportar.")
     
-    st.markdown(\"### Exportar Inventário em CSV\")
+    st.markdown("### Exportar Inventário em CSV")
     inventario_data = get_machines_from_inventory()
     if inventario_data:
         df_inv = pd.DataFrame(inventario_data)
-        csv_inv = df_inv.to_csv(index=False).encode(\"utf-8\")
+        csv_inv = df_inv.to_csv(index=False).encode("utf-8")
         st.download_button(\"Baixar Inventário CSV\", data=csv_inv, file_name=\"inventario.csv\", mime=\"text/csv\")
     else:
-        st.write(\"Nenhum item de inventário para exportar.\")
+        st.write("Nenhum item de inventário para exportar.")
 
 ####################################
 # 11) Função Sair
