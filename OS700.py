@@ -212,7 +212,7 @@ def dashboard_page():
                     abertura = datetime.strptime(c["hora_abertura"], '%d/%m/%Y %H:%M:%S')
                     agora_local = datetime.now(FORTALEZA_TZ)
                     tempo_util = calculate_working_hours(abertura, agora_local)
-                    if tempo_util > timedelta(hours=48):
+                    if tempo_util > timedelta(hours=8):
                         atrasados.append(c)
                 except:
                     pass
@@ -235,7 +235,7 @@ def dashboard_page():
         st.write("Nenhum chamado registrado.")
     
     # Exemplo de auto-refresh do dashboard (opcional)
-    # st_autorefresh(interval=60000, key='dashboard_refresh')  # a cada 1 min
+        st_autorefresh(interval=60000, key='dashboard_refresh')  # a cada 1 min
 
 ####################################
 # 3) Página de Abrir Chamado
