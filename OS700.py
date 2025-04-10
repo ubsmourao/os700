@@ -622,7 +622,7 @@ def exportar_dados_page():
     if inventario_data:
         df_inv = pd.DataFrame(inventario_data)
         csv_inv = df_inv.to_csv(index=False).encode("utf-8")
-        st.download_button(\"Baixar Inventário CSV\", data=csv_inv, file_name=\"inventario.csv\", mime=\"text/csv\")
+        st.download_button("Baixar Inventário CSV", data=csv_inv, file_name="inventario.csv", mime="text/csv")
     else:
         st.write("Nenhum item de inventário para exportar.")
 
