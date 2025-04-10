@@ -283,8 +283,8 @@ def chamados_tecnicos_page():
     df = pd.DataFrame(chamados)
 
     if "protocolo" in df.columns and "id" in df.columns:
-    nova_ordem = ["protocolo", "id"] + [col for col in df.columns if col not in ["protocolo", "id"]]
-    df = df[nova_ordem]
+        nova_ordem = ["protocolo", "id"] + [col for col in df.columns if col not in ["protocolo", "id"]]
+        df = df[nova_ordem]
 
 
     def calcula_tempo(row):
