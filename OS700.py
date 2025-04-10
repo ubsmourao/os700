@@ -630,9 +630,9 @@ def exportar_dados_page():
 # 11) Função Sair
 ####################################
 def sair_page():
-    st.session_state[\"logged_in\"] = False
-    st.session_state[\"username\"] = \"\"
-    st.success(\"Você saiu.\")
+    st.session_state["logged_in"] = False
+    st.session_state["username"] = ""
+    st.success("Você saiu.")
 
 ####################################
 # Mapeamento das Páginas
