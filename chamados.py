@@ -270,5 +270,3 @@ def reabrir_chamado(id_chamado, remover_historico=False):
     except Exception as e:
         st.error(f"Erro ao reabrir chamado: {e}")
 
-if __name__ == "__main__":
-    st.write("Módulo de Chamados - Supabase - Hora Local de Fortaleza")
