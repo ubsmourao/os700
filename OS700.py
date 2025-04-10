@@ -597,10 +597,10 @@ def relatorios_page():
         elif isinstance(pdf_output, bytearray):
             pdf_output = bytes(pdf_output)
         st.download_button(
-            label=\"Baixar Relatório Completo de Chamados\",
+            label="Baixar Relatório Completo de Chamados",
             data=pdf_output,
-            file_name=\"relatorio_chamados_completo.pdf\",
-            mime=\"application/pdf\"
+            file_name="relatorio_chamados_completo.pdf",
+            mime="application/pdf"
         )
 
 ####################################
@@ -613,7 +613,7 @@ def exportar_dados_page():
     if chamados:
         df_chamados = pd.DataFrame(chamados)
         csv_chamados = df_chamados.to_csv(index=False).encode("utf-8")
-        st.download_button(\"Baixar Chamados CSV\", data=csv_chamados, file_name=\"chamados.csv\", mime=\"text/csv\")
+        st.download_button("Baixar Chamados CSV", data=csv_chamados, file_name="chamados.csv", mime="text/csv")
     else:
         st.write("Nenhum chamado para exportar.")
     
@@ -655,7 +655,7 @@ pages = {
 if selected in pages:
     pages[selected]()
 else:
-    st.write(\"Página não encontrada.\")
+    st.write("Página não encontrada.")
 
 # Rodapé
 st.markdown(\"---\")
