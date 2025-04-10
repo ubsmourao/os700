@@ -11,10 +11,6 @@ from st_aggrid import AgGrid, GridOptionsBuilder
 from fpdf import FPDF
 from io import BytesIO
 
-# OBS: Se não quiser auto-refresh, pode comentar a linha st_autorefresh
-from streamlit.runtime.scriptrunner import add_script_run_ctx
-# from streamlit_autorefresh import st_autorefresh  # Se preferir um pacote extra
-
 # Define o fuso horário de Fortaleza
 FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
 
@@ -43,7 +39,7 @@ from estoque import manage_estoque, get_estoque
 # Configuração de logging
 logging.basicConfig(level=logging.INFO)
 
-# Inicialização da sessão
+# Inicialização da sessão (variáveis de login)
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "username" not in st.session_state:
@@ -60,7 +56,6 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* Exemplo de personalização */
     body {
       background-color: #F8FAFC;
       font-family: "Roboto", sans-serif;
@@ -79,7 +74,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Carrega (se existir) o logotipo, definindo se será exibido no topo
+# Carrega (se existir) o logotipo
 logo_path = os.getenv("LOGO_PATH", "infocustec.png")
 if os.path.exists(logo_path):
     st.image(logo_path, width=300)
@@ -189,53 +184,76 @@ def login_page():
             st.error("Usuário ou senha incorretos.")
 
 ####################################
-# 2) Página de Dashboard (agora com Plotly)
+# 2) Página de Dashboard (Tendência Mensal e Semanal)
 ####################################
 def dashboard_page():
     st.subheader("Dashboard - Administrativo")
     agora_fortaleza = datetime.now(FORTALEZA_TZ)
     st.markdown(f"**Horário local (Fortaleza):** {agora_fortaleza.strftime('%d/%m/%Y %H:%M:%S')}")
-    
+
     chamados = list_chamados()
-    total_chamados = len(chamados) if chamados else 0
-    abertos = len(list_chamados_em_aberto()) if chamados else 0
-    col1, col2 = st.columns(2)
-    col1.metric("Total de Chamados", total_chamados)
-    col2.metric("Chamados Abertos", abertos)
-    
+    if not chamados:
+        st.info("Nenhum chamado registrado.")
+        return
+
+    df = pd.DataFrame(chamados)
+    df["hora_abertura_dt"] = pd.to_datetime(df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
+
+    total_chamados = len(df)
+    abertos = df["hora_fechamento"].isnull().sum()
+    fechados = df["hora_fechamento"].notnull().sum()
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Chamados", total_chamados)
+    col2.metric("Em Aberto", abertos)
+    col3.metric("Fechados", fechados)
+
     # Identifica chamados atrasados (mais de 48h úteis)
     atrasados = []
-    if chamados:
-        for c in chamados:
-            if c.get("hora_fechamento") is None:
-                try:
-                    abertura = datetime.strptime(c["hora_abertura"], '%d/%m/%Y %H:%M:%S')
-                    agora_local = datetime.now(FORTALEZA_TZ)
-                    tempo_util = calculate_working_hours(abertura, agora_local)
-                    if tempo_util > timedelta(hours=8):
-                        atrasados.append(c)
-                except:
-                    pass
+    for c in chamados:
+        if c.get("hora_fechamento") is None:
+            try:
+                abertura = datetime.strptime(c["hora_abertura"], '%d/%m/%Y %H:%M:%S')
+                agora_local = datetime.now(FORTALEZA_TZ)
+                tempo_util = calculate_working_hours(abertura, agora_local)
+                if tempo_util > timedelta(hours=48):
+                    atrasados.append(c)
+            except:
+                pass
     if atrasados:
-        st.warning(f"Atenção: {len(atrasados)} chamados abertos com mais de 48h úteis!")
-    
-    # Gráfico de tendência usando Plotly
-    if chamados:
-        df = pd.DataFrame(chamados)
-        df["hora_abertura_dt"] = pd.to_datetime(df["hora_abertura"], format='%d/%m/%Y %H:%M:%S', errors='coerce')
-        df["mes"] = df["hora_abertura_dt"].dt.to_period("M").astype(str)
-        tendencia = df.groupby("mes").size().reset_index(name="qtd")
-        st.markdown("### Tendência de Chamados por Mês (Plotly)")
-        if not tendencia.empty:
-            fig = px.line(tendencia, x="mes", y="qtd", markers=True, title="Chamados por Mês")
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Nenhum dado para gerar gráfico.")
+        st.warning(f"Atenção: {len(atrasados)} chamados abertos há mais de 48h úteis!")
+
+    # Tendência Mensal
+    df["mes"] = df["hora_abertura_dt"].dt.to_period("M").astype(str)
+    tendencia_mensal = df.groupby("mes").size().reset_index(name="qtd_mensal")
+    st.markdown("### Tendência de Chamados por Mês")
+    if not tendencia_mensal.empty:
+        fig_mensal = px.line(tendencia_mensal, x="mes", y="qtd_mensal", markers=True, title="Chamados por Mês")
+        st.plotly_chart(fig_mensal, use_container_width=True)
     else:
-        st.write("Nenhum chamado registrado.")
-    
-    # Exemplo de auto-refresh do dashboard (opcional)
-        st_autorefresh(interval=60000, key='dashboard_refresh')  # a cada 1 min
+        st.info("Sem dados suficientes para exibir tendência mensal.")
+
+    # Tendência Semanal
+    df["semana"] = df["hora_abertura_dt"].dt.to_period("W").astype(str)
+    tendencia_semanal = df.groupby("semana").size().reset_index(name="qtd_semanal")
+
+    # Para ordenar corretamente no eixo X (semana = '2023-23' etc.), criamos col auxiliar "ano_semana"
+    def parse_ano_semana(semana_str):
+        # '2023-23' -> (2023, 23)
+        # Se der erro, retorna (9999, 9999) p/ não travar
+        try:
+            ano, wk = semana_str.split("-")
+            return (int(ano), int(wk))
+        except:
+            return (9999, 9999)
+
+    tendencia_semanal["ano_semana"] = tendencia_semanal["semana"].apply(parse_ano_semana)
+    tendencia_semanal.sort_values("ano_semana", inplace=True)
+    st.markdown("### Tendência de Chamados por Semana")
+    if not tendencia_semanal.empty:
+        fig_semanal = px.line(tendencia_semanal, x="semana", y="qtd_semanal", markers=True, title="Chamados por Semana")
+        st.plotly_chart(fig_semanal, use_container_width=True)
+    else:
+        st.info("Sem dados suficientes para exibir tendência semanal.")
 
 ####################################
 # 3) Página de Abrir Chamado
@@ -589,8 +607,8 @@ def relatorios_page():
         for idx, row in df_chamados.iterrows():
             for col in df_chamados.columns:
                 pdf.cell(0, 8, f'{col}: {row[col]}', ln=True)
-
             pdf.ln(5)
+
         pdf_output = pdf.output(dest="S")
         if isinstance(pdf_output, str):
             pdf_output = pdf_output.encode("latin-1")
@@ -616,7 +634,7 @@ def exportar_dados_page():
         st.download_button("Baixar Chamados CSV", data=csv_chamados, file_name="chamados.csv", mime="text/csv")
     else:
         st.write("Nenhum chamado para exportar.")
-    
+
     st.markdown("### Exportar Inventário em CSV")
     inventario_data = get_machines_from_inventory()
     if inventario_data:
@@ -644,7 +662,7 @@ pages = {
     "Buscar Chamado": buscar_chamado_page,
     "Chamados Técnicos": chamados_tecnicos_page,
     "Inventário": inventario_page,
-    "Estoque": estoque_page,       # Chama a função manage_estoque ou a wrapper
+    "Estoque": estoque_page,
     "Administração": administracao_page,
     "Relatórios": relatorios_page,
     "Exportar Dados": exportar_dados_page,
@@ -659,4 +677,4 @@ else:
 
 # Rodapé
 st.markdown("---")
-st.markdown("<center>© 2025 Infocustec. Todos os direitos reservados.<center>", unsafe_allow_html=True)
+st.markdown("<center>© 2025 Infocustec. Todos os direitos reservados.</center>", unsafe_allow_html=True)
