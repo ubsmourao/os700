@@ -591,7 +591,7 @@ def relatorios_page():
                 pdf.cell(0, 8, f'{col}: {row[col]}', ln=True)
 
             pdf.ln(5)
-        pdf_output = pdf.output(dest=\"S\")
+        pdf_output = pdf.output(dest="S")
         if isinstance(pdf_output, str):
             pdf_output = pdf_output.encode(\"latin-1\")
         elif isinstance(pdf_output, bytearray):
