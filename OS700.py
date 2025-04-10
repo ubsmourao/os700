@@ -9,6 +9,8 @@ from st_aggrid import AgGrid, GridOptionsBuilder
 import logging
 from fpdf import FPDF
 from io import BytesIO
+import matplotlib.pyplot as plt
+
 
 # Importação dos módulos internos – ajuste os caminhos conforme a sua estrutura
 from supabase_client import supabase
