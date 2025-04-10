@@ -588,7 +588,7 @@ def relatorios_page():
         pdf.set_font("Arial", "", 10)
         for idx, row in df_chamados.iterrows():
             for col in df_chamados.columns:
-                pdf.cell(0, 8, f\"{col}: {str(row[col])}\", ln=True)
+                pdf.cell(0, 8, f\"{col}: {str(row[col])}", ln=True)
             pdf.ln(5)
         pdf_output = pdf.output(dest=\"S\")
         if isinstance(pdf_output, str):
