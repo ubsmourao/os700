@@ -13,7 +13,6 @@ from ubs import get_ubs_list
 
 FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
 
-
 ###########################
 # 1. Funções Básicas
 ###########################
@@ -36,7 +35,7 @@ def get_machines_from_inventory():
 def edit_inventory_item(patrimonio, new_values):
     """
     Edita campos de uma máquina específica, identificada pelo patrimônio.
-    new_values é um dicionário {coluna: valor} que será atualizado.
+    new_values é um dicionário {coluna: valor}.
     """
     try:
         supabase.table("inventario").update(new_values).eq("numero_patrimonio", patrimonio).execute()
@@ -89,7 +88,6 @@ def delete_inventory_item(patrimonio):
         st.error("Erro ao excluir item do inventário.")
         print(f"Erro: {e}")
 
-
 ###########################
 # 2. Peças Usadas
 ###########################
@@ -118,7 +116,6 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
         print(f"Erro: {e}")
         return []
 
-
 ###########################
 # 3. Histórico de Manutenção
 ###########################
@@ -136,15 +133,14 @@ def get_historico_manutencao_por_patrimonio(patrimonio):
         print(f"Erro: {e}")
         return []
 
-
 ###########################
 # 4. Cadastro de Máquina
 ###########################
 
 def cadastro_maquina():
     """
-    Cadastro básico de máquina no inventário.
-    Caso queira remover completamente o upload de imagem, basta remover o file_uploader.
+    Cadastro básico de máquina no inventário. Caso queira remover completamente o upload de imagem,
+    basta remover o file_uploader.
     """
     st.subheader("Cadastrar Máquina no Inventário")
 
@@ -193,9 +189,8 @@ def cadastro_maquina():
             st.error("Erro ao cadastrar máquina.")
             st.write(e)
 
-
 ###########################
-# 5. Mostrar Inventário (com filtros, edição) 
+# 5. Mostrar Inventário (com filtros, edição)
 ###########################
 
 def show_inventory_list():
@@ -394,7 +389,6 @@ def show_inventory_list():
             else:
                 st.write("Nenhum registro de manutenção encontrado para este item.")
 
-
 ###########################
 # 6. Dashboard do Inventário
 ###########################
@@ -458,7 +452,6 @@ def dashboard_inventario():
     # 3) Distribuição por UBS (Computadores e Impressoras)
     if "localizacao" in df.columns and "tipo" in df.columns:
         st.markdown("### 3) Distribuição por UBS ")
-
         df_ubs = df[df["tipo"].isin(["Computador", "Impressora"])]
         if df_ubs.empty:
             st.write("Nenhum Computador ou Impressora encontrado no inventário.")
@@ -518,7 +511,6 @@ def dashboard_inventario():
         ax5.invert_yaxis()
         st.pyplot(fig5)
 
-
 ###########################
 # 7. Geração de Relatório em PDF
 ###########################
@@ -544,7 +536,7 @@ def gerar_relatorio_inventario_pdf(df_inventario):
     pdf.add_page()
     pdf.set_font("Arial", "", 10)
 
-    # Selecione as colunas (e suas larguras) que quer no PDF
+    # Escolha as colunas (e suas larguras) que quer no PDF
     columns = ["numero_patrimonio", "tipo", "marca", "modelo", "status", "localizacao", "setor"]
     headers = ["Patrimônio", "Tipo", "Marca", "Modelo", "Status", "Localização", "Setor"]
 
@@ -566,17 +558,19 @@ def gerar_relatorio_inventario_pdf(df_inventario):
         pdf.cell(col_widths[6], 8, str(row["setor"]), border=1, ln=0)
         pdf.ln(8)
 
-    # pdf.output(dest="S") pode retornar str ou bytes, dependendo da versão do FPDF.
+    # Gera stream. Podem retornar string, bytes ou um objeto de arquivo
     pdf_stream = pdf.output(dest="S")
 
-    # Se for um objeto que tenha .getvalue(), extraímos bytes
+    # Se for um objeto com getvalue(), extrai
     if hasattr(pdf_stream, "getvalue"):
-        pdf_bytes = pdf_stream.getvalue()
-    else:
-        pdf_bytes = pdf_stream
+        pdf_stream = pdf_stream.getvalue()
 
-    # Se pdf_bytes for string, convertemos para bytes
-    if isinstance(pdf_bytes, str):
-        pdf_bytes = pdf_bytes.encode("latin-1")
+    # Se for str, converte para bytes
+    if isinstance(pdf_stream, str):
+        pdf_stream = pdf_stream.encode("latin-1")
 
-    return pdf_bytes
+    # Se ainda não for bytes, tenta converter
+    if not isinstance(pdf_stream, (bytes, bytearray)):
+        pdf_stream = bytes(pdf_stream)
+
+    return pdf_stream
