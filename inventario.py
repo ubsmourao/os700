@@ -1,11 +1,12 @@
 import streamlit as st
 import pandas as pd
-import base64  # Para manipular a imagem em base64
+import base64
 import pytz
 from datetime import datetime
 from st_aggrid import AgGrid, GridOptionsBuilder
 import matplotlib.pyplot as plt
 from fpdf import FPDF
+import os
 
 from supabase_client import supabase
 from setores import get_setores_list
@@ -18,10 +19,6 @@ FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
 ###########################
 
 def get_machines_from_inventory():
-    """
-    Retorna todos os registros da tabela 'inventario' no Supabase,
-    com campos para exibir/manipular no app.
-    """
     try:
         resp = supabase.table("inventario").select(
             "id,numero_patrimonio,tipo,marca,modelo,numero_serie,status,localizacao,propria_locada,setor,data_aquisicao,data_garantia_fim"
@@ -33,10 +30,6 @@ def get_machines_from_inventory():
         return []
 
 def edit_inventory_item(patrimonio, new_values):
-    """
-    Atualiza campos de uma máquina (identificada por 'patrimonio')
-    usando um dicionário new_values {campo: valor}.
-    """
     try:
         supabase.table("inventario").update(new_values).eq("numero_patrimonio", patrimonio).execute()
         st.success("Item atualizado com sucesso!")
@@ -49,9 +42,6 @@ def add_machine_to_inventory(
     propria_locada, patrimonio, setor,
     data_aquisicao=None, data_garantia_fim=None
 ):
-    """
-    Adiciona nova máquina. Se o patrimônio já existe, exibe erro.
-    """
     try:
         resp = supabase.table("inventario").select("numero_patrimonio").eq("numero_patrimonio", patrimonio).execute()
         if resp.data:
@@ -77,9 +67,6 @@ def add_machine_to_inventory(
         print(f"Erro: {e}")
 
 def delete_inventory_item(patrimonio):
-    """
-    Exclui uma máquina do inventário.
-    """
     try:
         supabase.table("inventario").delete().eq("numero_patrimonio", patrimonio).execute()
         st.success("Item excluído com sucesso!")
@@ -93,9 +80,6 @@ def delete_inventory_item(patrimonio):
 ###########################
 
 def get_pecas_usadas_por_patrimonio(patrimonio):
-    """
-    Recupera todas as peças utilizadas associadas aos chamados da máquina (pelo patrimônio).
-    """
     try:
         mod = __import__("chamados", fromlist=["get_chamados_por_patrimonio"])
         get_chamados_por_patrimonio = mod.get_chamados_por_patrimonio
@@ -103,12 +87,10 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
         st.error("Erro ao importar função de chamados.")
         print(f"Erro: {e}")
         return []
-
     chamados = get_chamados_por_patrimonio(patrimonio)
     if not chamados:
         return []
     chamado_ids = [ch["id"] for ch in chamados if "id" in ch]
-
     try:
         resp = supabase.table("pecas_usadas").select("*").in_("chamado_id", chamado_ids).execute()
         return resp.data if resp.data else []
@@ -123,9 +105,6 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
 ###########################
 
 def get_historico_manutencao_por_patrimonio(patrimonio):
-    """
-    Retorna todos os registros de manutenção (histórico) de uma máquina (numero_patrimonio).
-    """
     try:
         resp = supabase.table("historico_manutencao").select("*").eq("numero_patrimonio", patrimonio).execute()
         return resp.data if resp.data else []
@@ -140,9 +119,6 @@ def get_historico_manutencao_por_patrimonio(patrimonio):
 ###########################
 
 def cadastro_maquina():
-    """
-    Cadastro básico de máquina no inventário. Inclui opção de foto (opcional).
-    """
     st.subheader("Cadastrar Máquina no Inventário")
 
     tipo_options = ["Computador", "Impressora", "Monitor", "Nobreak", "Outro"]
@@ -196,14 +172,6 @@ def cadastro_maquina():
 ###########################
 
 def show_inventory_list():
-    """
-    Lista o inventário com:
-      - Filtros de busca
-      - Edição/Exclusão de itens 
-      - Histórico do patrimônio (chamados, peças, manutenção)
-      - Geração de PDF
-    """
-
     st.subheader("Inventário - Lista com Filtros")
 
     # Filtros
@@ -226,7 +194,7 @@ def show_inventory_list():
 
     df = pd.DataFrame(machines)
 
-    # Aplicando filtros
+    # Aplica filtros
     if filtro_texto:
         filtro_lower = filtro_texto.lower()
         df = df[df.apply(lambda row: filtro_lower in str(row).lower(), axis=1)]
@@ -256,7 +224,7 @@ def show_inventory_list():
             fit_columns_on_grid_load=True
         )
 
-        # Gera PDF do inventário filtrado
+        # Geração do PDF do inventário filtrado
         if st.button("Gerar PDF do Inventário"):
             pdf_bytes = gerar_relatorio_inventario_pdf(df)
             st.download_button(
@@ -392,19 +360,18 @@ def show_inventory_list():
             else:
                 st.write("Nenhum registro de manutenção encontrado para este item.")
 
-
 ###########################
 # 6. Dashboard do Inventário
 ###########################
 
 def dashboard_inventario():
     """
-    Exemplo de painel que inclui:
+    Exemplo de painel do inventário que inclui:
       - Distribuição por Status
       - Distribuição por Tipo
-      - Distribuição por UBS (Computadores/Impressoras)
+      - Distribuição por UBS
       - Distribuição por Setor
-      - Máquinas com mais chamados
+      - Máquinas com Mais Chamados
     """
     st.subheader("Dashboard do Inventário")
 
@@ -452,7 +419,7 @@ def dashboard_inventario():
     else:
         st.warning("Coluna 'tipo' não encontrada no inventário.")
 
-    # 3) Distribuição por UBS (Computadores/Impressoras)
+    # 3) Distribuição por UBS
     if "localizacao" in df.columns and "tipo" in df.columns:
         st.markdown("### 3) Distribuição por UBS ")
         df_ubs = df[df["tipo"].isin(["Computador", "Impressora"])]
@@ -491,7 +458,7 @@ def dashboard_inventario():
     else:
         st.warning("Coluna 'setor' não encontrada no inventário.")
 
-    # 5) Máquinas com mais chamados (Top 10)
+    # 5) Máquinas com Mais Chamados (Top 10)
     st.markdown("### 5) Máquinas com Mais Chamados (Top 10)")
     if df_chamados.empty:
         st.info("Não há chamados registrados para cruzar com o inventário.")
@@ -515,13 +482,24 @@ def dashboard_inventario():
 
 
 ###########################
-# 7. Geração de Relatório em PDF
+# 7. Geração de Relatório em PDF (com logo + gráficos)
 ###########################
 
 class PDF(FPDF):
+    def __init__(self, orientation="L", unit="mm", format="A4", logo_path="logo.png"):
+        super().__init__(orientation, unit, format)
+        self.logo_path = logo_path
+
     def header(self):
+        # Tenta inserir logotipo no canto esquerdo, se existir
+        if os.path.exists(self.logo_path):
+            self.image(self.logo_path, x=10, y=8, w=30)
+            self.set_xy(45, 10)
+        else:
+            self.set_xy(10, 10)
+
         self.set_font("Arial", "B", 14)
-        self.cell(0, 10, "Relatório de Inventário", ln=True, align="C")
+        self.cell(0, 10, "Relatório de Inventário", ln=True, align="L")
         self.ln(5)
 
     def footer(self):
@@ -529,20 +507,24 @@ class PDF(FPDF):
         self.set_font("Arial", "I", 10)
         self.cell(0, 10, f"Página {self.page_no()}", 0, 0, "C")
 
+
 def gerar_relatorio_inventario_pdf(df_inventario):
     """
-    Gera um PDF formatado (tabela) a partir do DataFrame df_inventario.
-    Retorna o conteúdo binário do PDF, pronto para uso em st.download_button.
+    Gera um PDF com:
+      - Logotipo no header (se existir 'logo.png')
+      - Tabela do inventário (colunas mais largas para caber melhor)
+      - Exemplo de salvamento de um gráfico
     """
 
-    pdf = PDF("P", "mm", "A4")
+    # Modo Paisagem (L) para dar mais espaço e evitar sobreposição
+    pdf = PDF(orientation="L", format="A4", logo_path="logo.png")
     pdf.add_page()
     pdf.set_font("Arial", "", 10)
 
-    # Ajuste as colunas conforme desejar
+    # Ajusta as colunas
     columns = ["numero_patrimonio", "tipo", "marca", "modelo", "status", "localizacao", "setor"]
     headers = ["Patrimônio", "Tipo", "Marca", "Modelo", "Status", "Localização", "Setor"]
-    col_widths = [25, 25, 25, 30, 20, 35, 25]
+    col_widths = [30, 30, 30, 40, 25, 40, 30]  # Ajuste conforme necessidade
 
     # Cabeçalho da tabela
     for i, header_text in enumerate(headers):
@@ -560,22 +542,36 @@ def gerar_relatorio_inventario_pdf(df_inventario):
         pdf.cell(col_widths[6], 8, str(row["setor"]), border=1, ln=0)
         pdf.ln(8)
 
-    # pdf.output(dest="S") pode retornar str, bytes, ou bytearray
+    # (Opcional) Exemplo: inserir gráfico de distribuição do status
+    # 1) Cria um plot no matplotlib
+    try:
+        status_count = df_inventario["status"].value_counts().reset_index()
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.bar(status_count["index"], status_count["status"])
+        ax.set_title("Distribuição de Status")
+        # 2) Salva em arquivo temporário
+        temp_chart = "chart_temp.png"
+        plt.savefig(temp_chart, dpi=100)
+        plt.close(fig)
+        # 3) Insere no PDF
+        pdf.add_page()  # nova página para o gráfico
+        pdf.set_xy(10, 20)
+        pdf.image(temp_chart, x=10, y=20, w=120)
+        # 4) Remove o arquivo temporário
+        if os.path.exists(temp_chart):
+            os.remove(temp_chart)
+    except Exception as e:
+        print("Erro ao gerar gráfico de status:", e)
+
+    # pdf.output(dest="S") pode retornar str, bytes ou bytearray
     pdf_stream = pdf.output(dest="S")
 
-    # Se tiver getvalue(), chamamos
     if hasattr(pdf_stream, "getvalue"):
         pdf_stream = pdf_stream.getvalue()
-
-    # Se for str, convertemos p/ bytes
     if isinstance(pdf_stream, str):
         pdf_stream = pdf_stream.encode("latin-1")
-
-    # Se for bytearray, convertemos p/ bytes
     if isinstance(pdf_stream, bytearray):
         pdf_stream = bytes(pdf_stream)
-
-    # Se ainda não for bytes, forçamos
     if not isinstance(pdf_stream, (bytes, bytearray)):
         pdf_stream = bytes(pdf_stream)
 
