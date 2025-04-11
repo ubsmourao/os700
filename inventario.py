@@ -533,5 +533,5 @@ def gerar_relatorio_inventario_pdf(df_inventario):
         pdf.cell(col_widths[6], 8, str(row["setor"]), border=1, ln=0)
         pdf.ln(8)
 
-    pdf_output = pdf.output(dest="S").encode("latin-1")
+    pdf_output = pdf.output(dest="S")
     return pdf_output
