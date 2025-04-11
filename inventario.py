@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import base64  # Para manipular a imagem em base64
 import pytz
 from datetime import datetime
 from st_aggrid import AgGrid, GridOptionsBuilder
@@ -12,11 +13,16 @@ from ubs import get_ubs_list
 
 FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
 
+
 ###########################
 # 1. Funções Básicas
 ###########################
 
 def get_machines_from_inventory():
+    """
+    Retorna todos os registros da tabela 'inventario' no Supabase,
+    contendo campos principais para exibir e manipular no app.
+    """
     try:
         resp = supabase.table("inventario").select(
             "id,numero_patrimonio,tipo,marca,modelo,numero_serie,status,localizacao,propria_locada,setor,data_aquisicao,data_garantia_fim"
@@ -30,7 +36,7 @@ def get_machines_from_inventory():
 def edit_inventory_item(patrimonio, new_values):
     """
     Edita campos de uma máquina específica, identificada pelo patrimônio.
-    new_values é um dicionário {coluna: valor}.
+    new_values é um dicionário {coluna: valor} que será atualizado.
     """
     try:
         supabase.table("inventario").update(new_values).eq("numero_patrimonio", patrimonio).execute()
@@ -45,11 +51,10 @@ def add_machine_to_inventory(
     data_aquisicao=None, data_garantia_fim=None
 ):
     """
-    Adiciona nova máquina ao inventário, incluindo data_aquisicao e data_garantia_fim
-    se quiser usar controle de garantia. Ajuste o BD conforme necessidade.
+    Adiciona uma nova máquina à tabela 'inventario'.
+    Verifica se o patrimônio já existe, e se não existir, insere.
     """
     try:
-        # Verifica se já existe esse patrimônio
         resp = supabase.table("inventario").select("numero_patrimonio").eq("numero_patrimonio", patrimonio).execute()
         if resp.data:
             st.error(f"Máquina com patrimônio {patrimonio} já existe no inventário.")
@@ -84,13 +89,15 @@ def delete_inventory_item(patrimonio):
         st.error("Erro ao excluir item do inventário.")
         print(f"Erro: {e}")
 
+
 ###########################
 # 2. Peças Usadas
 ###########################
 
 def get_pecas_usadas_por_patrimonio(patrimonio):
     """
-    Recupera todas as peças utilizadas associadas aos chamados técnicos da máquina.
+    Recupera todas as peças utilizadas associadas aos chamados técnicos da máquina,
+    localizando os chamados via 'numero_patrimonio'.
     """
     try:
         mod = __import__("chamados", fromlist=["get_chamados_por_patrimonio"])
@@ -111,14 +118,15 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
         print(f"Erro: {e}")
         return []
 
+
 ###########################
 # 3. Histórico de Manutenção
 ###########################
 
 def get_historico_manutencao_por_patrimonio(patrimonio):
     """
-    Retorna todos os registros de manutenção (tabela 'historico_manutencao')
-    para a máquina identificada pelo numero_patrimonio.
+    Busca na tabela 'historico_manutencao' todos os registros associados 
+    ao patrimonio especificado.
     """
     try:
         resp = supabase.table("historico_manutencao").select("*").eq("numero_patrimonio", patrimonio).execute()
@@ -128,13 +136,15 @@ def get_historico_manutencao_por_patrimonio(patrimonio):
         print(f"Erro: {e}")
         return []
 
+
 ###########################
 # 4. Cadastro de Máquina
 ###########################
 
 def cadastro_maquina():
     """
-    Cadastro básico de máquina no inventário, incluindo foto opcional.
+    Cadastro básico de máquina no inventário.
+    Caso queira remover completamente o upload de imagem, basta remover o file_uploader.
     """
     st.subheader("Cadastrar Máquina no Inventário")
 
@@ -159,8 +169,7 @@ def cadastro_maquina():
     propria_options = ["Propria", "Locada"]
     propria_locada = st.selectbox("Própria ou Locada", propria_options)
 
-    # Upload opcional de imagem (se desejado)
-    uploaded_file = st.file_uploader("Foto opcional", type=["png","jpg","jpeg"])
+    uploaded_file = st.file_uploader("Foto opcional da máquina", type=["png","jpg","jpeg"])
 
     if st.button("Cadastrar Máquina"):
         image_data = None
@@ -184,22 +193,23 @@ def cadastro_maquina():
             st.error("Erro ao cadastrar máquina.")
             st.write(e)
 
+
 ###########################
-# 5. Mostrar Inventário (com filtros e edição)
+# 5. Mostrar Inventário (com filtros, edição) 
 ###########################
 
 def show_inventory_list():
     """
     Lista o inventário com:
-      - Filtros para refinar a busca
-      - Opção de editar qualquer campo (incluindo foto)
-      - Excluir item
-      - Histórico (chamados, peças, manutenção)
-      - Botão para gerar PDF
+      - Filtros de busca
+      - Edição/Exclusão de itens 
+      - Histórico do patrimônio (chamados, peças, manutenção)
+      - Opção de exportar PDF
     """
 
     st.subheader("Inventário - Lista com Filtros")
 
+    # Filtros
     filtro_texto = st.text_input("Buscar por texto (marca, modelo, patrimônio...)")
     status_options = ["Todos", "Ativo", "Em Manutencao", "Inativo"]
     status_filtro = st.selectbox("Filtrar por Status", status_options)
@@ -232,6 +242,7 @@ def show_inventory_list():
         df = df[df["setor"] == setor_filtro]
 
     st.markdown("### Resultado do Inventário (Filtrado)")
+
     if not df.empty:
         gb = GridOptionsBuilder.from_dataframe(df)
         gb.configure_default_column(filter=True, sortable=True)
@@ -245,12 +256,8 @@ def show_inventory_list():
             height=400,
             fit_columns_on_grid_load=True
         )
-    else:
-        st.warning("Nenhum resultado com esses filtros.")
 
-    # Botão para gerar PDF do inventário filtrado
-    st.markdown("---")
-    if not df.empty:
+        # Botão para gerar PDF do inventário filtrado
         if st.button("Gerar PDF do Inventário"):
             pdf_bytes = gerar_relatorio_inventario_pdf(df)
             st.download_button(
@@ -260,10 +267,18 @@ def show_inventory_list():
                 mime="application/pdf"
             )
 
+    else:
+        st.warning("Nenhum resultado com esses filtros.")
+
+    # Detalhes/Edição de item selecionado
     st.markdown("---")
     st.subheader("Detalhes / Edição de Item do Inventário")
 
-    patrimonio_options = df["numero_patrimonio"].unique().tolist()
+    if not df.empty:
+        patrimonio_options = df["numero_patrimonio"].unique().tolist()
+    else:
+        patrimonio_options = []
+
     if patrimonio_options:
         selected_patrimonio = st.selectbox("Selecione o patrimônio para visualizar detalhes", patrimonio_options)
     else:
@@ -344,13 +359,11 @@ def show_inventory_list():
                             encoded = base64.b64encode(file_content).decode("utf-8")
                             new_values["image_data"] = encoded
 
-                    supabase.table("inventario").update(new_values).eq("numero_patrimonio", selected_patrimonio).execute()
-                    st.success("Máquina atualizada com sucesso!")
+                    edit_inventory_item(selected_patrimonio, new_values)
 
         with st.expander("Excluir Máquina do Inventário"):
             if st.button("Excluir esta máquina"):
-                supabase.table("inventario").delete().eq("numero_patrimonio", selected_patrimonio).execute()
-                st.success("Máquina excluída com sucesso!")
+                delete_inventory_item(selected_patrimonio)
 
         with st.expander("Histórico Completo da Máquina"):
             st.markdown("**Chamados Técnicos:**")
@@ -361,9 +374,9 @@ def show_inventory_list():
                 st.error("Erro ao importar função de chamados.")
                 print(f"Erro: {e}")
                 get_chamados_por_patrimonio = lambda x: []
-            chamados = get_chamados_por_patrimonio(selected_patrimonio)
-            if chamados:
-                st.dataframe(pd.DataFrame(chamados))
+            chamados_ = get_chamados_por_patrimonio(selected_patrimonio)
+            if chamados_:
+                st.dataframe(pd.DataFrame(chamados_))
             else:
                 st.write("Nenhum chamado técnico encontrado para este item.")
 
@@ -381,11 +394,20 @@ def show_inventory_list():
             else:
                 st.write("Nenhum registro de manutenção encontrado para este item.")
 
+
 ###########################
 # 6. Dashboard do Inventário
 ###########################
 
 def dashboard_inventario():
+    """
+    Exemplo de painel do inventário que inclui:
+      - Distribuição por Status
+      - Distribuição por Tipo
+      - Distribuição por UBS (Computadores e Impressoras SEPARADOS)
+      - Distribuição por Setor
+      - Máquinas com mais chamados
+    """
     st.subheader("Dashboard do Inventário")
 
     data = get_machines_from_inventory()
@@ -402,8 +424,10 @@ def dashboard_inventario():
     if "status" in df.columns:
         status_count = df["status"].value_counts().reset_index()
         status_count.columns = ["status", "quantidade"]
+
         st.markdown("### 1) Distribuição por Status")
         st.table(status_count)
+
         fig, ax = plt.subplots()
         ax.bar(status_count["status"], status_count["quantidade"], color="green")
         ax.set_xlabel("Status")
@@ -418,7 +442,9 @@ def dashboard_inventario():
         st.markdown("### 2) Distribuição por Tipo de Equipamento")
         type_count = df["tipo"].value_counts().reset_index()
         type_count.columns = ["tipo", "quantidade"]
+
         st.table(type_count)
+
         fig2, ax2 = plt.subplots()
         ax2.bar(type_count["tipo"], type_count["quantidade"], color="blue")
         ax2.set_xlabel("Tipo de Equipamento")
@@ -432,6 +458,7 @@ def dashboard_inventario():
     # 3) Distribuição por UBS (Computadores e Impressoras)
     if "localizacao" in df.columns and "tipo" in df.columns:
         st.markdown("### 3) Distribuição por UBS ")
+
         df_ubs = df[df["tipo"].isin(["Computador", "Impressora"])]
         if df_ubs.empty:
             st.write("Nenhum Computador ou Impressora encontrado no inventário.")
@@ -441,6 +468,7 @@ def dashboard_inventario():
             pivot_ubs = pivot_ubs.fillna(0).astype(int)
             st.markdown("#### Tabela por UBS e Tipo ")
             st.table(pivot_ubs)
+
             fig3, ax3 = plt.subplots()
             pivot_ubs.plot(kind="bar", ax=ax3, stacked=False)
             ax3.set_xlabel("UBS (Localização)")
@@ -456,7 +484,9 @@ def dashboard_inventario():
         st.markdown("### 4) Distribuição por Setor")
         setor_count = df["setor"].value_counts().reset_index()
         setor_count.columns = ["setor", "quantidade"]
+
         st.table(setor_count)
+
         fig4, ax4 = plt.subplots()
         ax4.barh(setor_count["setor"], setor_count["quantidade"], color="purple")
         ax4.set_xlabel("Quantidade")
@@ -477,7 +507,9 @@ def dashboard_inventario():
         df_merged["qtd_chamados"] = df_merged["qtd_chamados"].fillna(0)
         df_merged.sort_values("qtd_chamados", ascending=False, inplace=True)
         top_10 = df_merged.head(10)
+
         st.dataframe(top_10[["numero_patrimonio", "tipo", "marca", "modelo", "qtd_chamados"]])
+
         fig5, ax5 = plt.subplots()
         ax5.barh(top_10["numero_patrimonio"].astype(str), top_10["qtd_chamados"], color="red")
         ax5.set_xlabel("Quantidade de Chamados")
@@ -485,6 +517,7 @@ def dashboard_inventario():
         ax5.set_title("Top 10 Máquinas com Mais Chamados")
         ax5.invert_yaxis()
         st.pyplot(fig5)
+
 
 ###########################
 # 7. Geração de Relatório em PDF
@@ -503,26 +536,26 @@ class PDF(FPDF):
 
 def gerar_relatorio_inventario_pdf(df_inventario):
     """
-    Gera um PDF formatado com base no DataFrame df_inventario.
-    Retorna o conteúdo do PDF em bytes, para ser baixado via st.download_button.
+    Gera um PDF formatado (tabela) a partir do DataFrame df_inventario.
+    Retorna o conteúdo binário do PDF, pronto para uso em st.download_button.
     """
+
     pdf = PDF("P", "mm", "A4")
     pdf.add_page()
     pdf.set_font("Arial", "", 10)
 
-    # Escolha as colunas desejadas no PDF
+    # Selecione as colunas (e suas larguras) que quer no PDF
     columns = ["numero_patrimonio", "tipo", "marca", "modelo", "status", "localizacao", "setor"]
     headers = ["Patrimônio", "Tipo", "Marca", "Modelo", "Status", "Localização", "Setor"]
 
-    # Ajuste de largura em mm para cada coluna
     col_widths = [25, 25, 25, 30, 20, 35, 25]
 
-    # Desenha cabeçalho
+    # Cabeçalho da tabela
     for i, header_text in enumerate(headers):
         pdf.cell(col_widths[i], 8, header_text, border=1, ln=0, align="C")
     pdf.ln(8)
 
-    # Itera sobre as linhas
+    # Linhas
     for _, row in df_inventario.iterrows():
         pdf.cell(col_widths[0], 8, str(row["numero_patrimonio"]), border=1, ln=0)
         pdf.cell(col_widths[1], 8, str(row["tipo"]), border=1, ln=0)
@@ -533,5 +566,17 @@ def gerar_relatorio_inventario_pdf(df_inventario):
         pdf.cell(col_widths[6], 8, str(row["setor"]), border=1, ln=0)
         pdf.ln(8)
 
-    pdf_output = pdf.output(dest="S")
-    return pdf_output
+    # pdf.output(dest="S") pode retornar str ou bytes, dependendo da versão do FPDF.
+    pdf_stream = pdf.output(dest="S")
+
+    # Se for um objeto que tenha .getvalue(), extraímos bytes
+    if hasattr(pdf_stream, "getvalue"):
+        pdf_bytes = pdf_stream.getvalue()
+    else:
+        pdf_bytes = pdf_stream
+
+    # Se pdf_bytes for string, convertemos para bytes
+    if isinstance(pdf_bytes, str):
+        pdf_bytes = pdf_bytes.encode("latin-1")
+
+    return pdf_bytes
