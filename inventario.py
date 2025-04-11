@@ -20,7 +20,7 @@ FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
 def get_machines_from_inventory():
     """
     Retorna todos os registros da tabela 'inventario' no Supabase,
-    contendo campos principais para exibir e manipular no app.
+    com campos para exibir/manipular no app.
     """
     try:
         resp = supabase.table("inventario").select(
@@ -34,8 +34,8 @@ def get_machines_from_inventory():
 
 def edit_inventory_item(patrimonio, new_values):
     """
-    Edita campos de uma máquina específica, identificada pelo patrimônio.
-    new_values é um dicionário {coluna: valor}.
+    Atualiza campos de uma máquina (identificada por 'patrimonio')
+    usando um dicionário new_values {campo: valor}.
     """
     try:
         supabase.table("inventario").update(new_values).eq("numero_patrimonio", patrimonio).execute()
@@ -50,8 +50,7 @@ def add_machine_to_inventory(
     data_aquisicao=None, data_garantia_fim=None
 ):
     """
-    Adiciona uma nova máquina à tabela 'inventario'.
-    Verifica se o patrimônio já existe, e se não existir, insere.
+    Adiciona nova máquina. Se o patrimônio já existe, exibe erro.
     """
     try:
         resp = supabase.table("inventario").select("numero_patrimonio").eq("numero_patrimonio", patrimonio).execute()
@@ -79,7 +78,7 @@ def add_machine_to_inventory(
 
 def delete_inventory_item(patrimonio):
     """
-    Exclui uma máquina do inventário pelo patrimônio.
+    Exclui uma máquina do inventário.
     """
     try:
         supabase.table("inventario").delete().eq("numero_patrimonio", patrimonio).execute()
@@ -88,14 +87,14 @@ def delete_inventory_item(patrimonio):
         st.error("Erro ao excluir item do inventário.")
         print(f"Erro: {e}")
 
+
 ###########################
 # 2. Peças Usadas
 ###########################
 
 def get_pecas_usadas_por_patrimonio(patrimonio):
     """
-    Recupera todas as peças utilizadas associadas aos chamados técnicos da máquina,
-    localizando os chamados via 'numero_patrimonio'.
+    Recupera todas as peças utilizadas associadas aos chamados da máquina (pelo patrimônio).
     """
     try:
         mod = __import__("chamados", fromlist=["get_chamados_por_patrimonio"])
@@ -104,10 +103,12 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
         st.error("Erro ao importar função de chamados.")
         print(f"Erro: {e}")
         return []
+
     chamados = get_chamados_por_patrimonio(patrimonio)
     if not chamados:
         return []
     chamado_ids = [ch["id"] for ch in chamados if "id" in ch]
+
     try:
         resp = supabase.table("pecas_usadas").select("*").in_("chamado_id", chamado_ids).execute()
         return resp.data if resp.data else []
@@ -116,14 +117,14 @@ def get_pecas_usadas_por_patrimonio(patrimonio):
         print(f"Erro: {e}")
         return []
 
+
 ###########################
 # 3. Histórico de Manutenção
 ###########################
 
 def get_historico_manutencao_por_patrimonio(patrimonio):
     """
-    Busca na tabela 'historico_manutencao' todos os registros associados 
-    ao patrimonio especificado.
+    Retorna todos os registros de manutenção (histórico) de uma máquina (numero_patrimonio).
     """
     try:
         resp = supabase.table("historico_manutencao").select("*").eq("numero_patrimonio", patrimonio).execute()
@@ -133,14 +134,14 @@ def get_historico_manutencao_por_patrimonio(patrimonio):
         print(f"Erro: {e}")
         return []
 
+
 ###########################
 # 4. Cadastro de Máquina
 ###########################
 
 def cadastro_maquina():
     """
-    Cadastro básico de máquina no inventário. Caso queira remover completamente o upload de imagem,
-    basta remover o file_uploader.
+    Cadastro básico de máquina no inventário. Inclui opção de foto (opcional).
     """
     st.subheader("Cadastrar Máquina no Inventário")
 
@@ -189,8 +190,9 @@ def cadastro_maquina():
             st.error("Erro ao cadastrar máquina.")
             st.write(e)
 
+
 ###########################
-# 5. Mostrar Inventário (com filtros, edição)
+# 5. Mostrar Inventário (com filtros e edição)
 ###########################
 
 def show_inventory_list():
@@ -199,7 +201,7 @@ def show_inventory_list():
       - Filtros de busca
       - Edição/Exclusão de itens 
       - Histórico do patrimônio (chamados, peças, manutenção)
-      - Opção de exportar PDF
+      - Geração de PDF
     """
 
     st.subheader("Inventário - Lista com Filtros")
@@ -208,9 +210,11 @@ def show_inventory_list():
     filtro_texto = st.text_input("Buscar por texto (marca, modelo, patrimônio...)")
     status_options = ["Todos", "Ativo", "Em Manutencao", "Inativo"]
     status_filtro = st.selectbox("Filtrar por Status", status_options)
+
     ubs_list = get_ubs_list()
     ubs_list_filtro = ["Todas"] + sorted(ubs_list)
     localizacao_filtro = st.selectbox("Filtrar por Localização (UBS)", ubs_list_filtro)
+
     setores_list = get_setores_list()
     setores_list_filtro = ["Todos"] + sorted(setores_list)
     setor_filtro = st.selectbox("Filtrar por Setor", setores_list_filtro)
@@ -222,7 +226,7 @@ def show_inventory_list():
 
     df = pd.DataFrame(machines)
 
-    # Aplica filtros
+    # Aplicando filtros
     if filtro_texto:
         filtro_lower = filtro_texto.lower()
         df = df[df.apply(lambda row: filtro_lower in str(row).lower(), axis=1)]
@@ -252,7 +256,7 @@ def show_inventory_list():
             fit_columns_on_grid_load=True
         )
 
-        # Botão para gerar PDF do inventário filtrado
+        # Gera PDF do inventário filtrado
         if st.button("Gerar PDF do Inventário"):
             pdf_bytes = gerar_relatorio_inventario_pdf(df)
             st.download_button(
@@ -265,7 +269,6 @@ def show_inventory_list():
     else:
         st.warning("Nenhum resultado com esses filtros.")
 
-    # Detalhes/Edição de item selecionado
     st.markdown("---")
     st.subheader("Detalhes / Edição de Item do Inventário")
 
@@ -389,16 +392,17 @@ def show_inventory_list():
             else:
                 st.write("Nenhum registro de manutenção encontrado para este item.")
 
+
 ###########################
 # 6. Dashboard do Inventário
 ###########################
 
 def dashboard_inventario():
     """
-    Exemplo de painel do inventário que inclui:
+    Exemplo de painel que inclui:
       - Distribuição por Status
       - Distribuição por Tipo
-      - Distribuição por UBS (Computadores e Impressoras SEPARADOS)
+      - Distribuição por UBS (Computadores/Impressoras)
       - Distribuição por Setor
       - Máquinas com mais chamados
     """
@@ -436,7 +440,6 @@ def dashboard_inventario():
         st.markdown("### 2) Distribuição por Tipo de Equipamento")
         type_count = df["tipo"].value_counts().reset_index()
         type_count.columns = ["tipo", "quantidade"]
-
         st.table(type_count)
 
         fig2, ax2 = plt.subplots()
@@ -449,16 +452,16 @@ def dashboard_inventario():
     else:
         st.warning("Coluna 'tipo' não encontrada no inventário.")
 
-    # 3) Distribuição por UBS (Computadores e Impressoras)
+    # 3) Distribuição por UBS (Computadores/Impressoras)
     if "localizacao" in df.columns and "tipo" in df.columns:
         st.markdown("### 3) Distribuição por UBS ")
         df_ubs = df[df["tipo"].isin(["Computador", "Impressora"])]
         if df_ubs.empty:
-            st.write("Nenhum Computador ou Impressora encontrado no inventário.")
+            st.write("Nenhum Computador ou Impressora encontrado.")
         else:
             group_ubs = df_ubs.groupby(["localizacao", "tipo"]).size().reset_index(name="quantidade")
             pivot_ubs = group_ubs.pivot(index="localizacao", columns="tipo", values="quantidade").fillna(0)
-            pivot_ubs = pivot_ubs.fillna(0).astype(int)
+            pivot_ubs = pivot_ubs.astype(int)
             st.markdown("#### Tabela por UBS e Tipo ")
             st.table(pivot_ubs)
 
@@ -477,7 +480,6 @@ def dashboard_inventario():
         st.markdown("### 4) Distribuição por Setor")
         setor_count = df["setor"].value_counts().reset_index()
         setor_count.columns = ["setor", "quantidade"]
-
         st.table(setor_count)
 
         fig4, ax4 = plt.subplots()
@@ -489,7 +491,7 @@ def dashboard_inventario():
     else:
         st.warning("Coluna 'setor' não encontrada no inventário.")
 
-    # 5) Máquinas com Mais Chamados (Top 10)
+    # 5) Máquinas com mais chamados (Top 10)
     st.markdown("### 5) Máquinas com Mais Chamados (Top 10)")
     if df_chamados.empty:
         st.info("Não há chamados registrados para cruzar com o inventário.")
@@ -510,6 +512,7 @@ def dashboard_inventario():
         ax5.set_title("Top 10 Máquinas com Mais Chamados")
         ax5.invert_yaxis()
         st.pyplot(fig5)
+
 
 ###########################
 # 7. Geração de Relatório em PDF
@@ -536,10 +539,9 @@ def gerar_relatorio_inventario_pdf(df_inventario):
     pdf.add_page()
     pdf.set_font("Arial", "", 10)
 
-    # Escolha as colunas (e suas larguras) que quer no PDF
+    # Ajuste as colunas conforme desejar
     columns = ["numero_patrimonio", "tipo", "marca", "modelo", "status", "localizacao", "setor"]
     headers = ["Patrimônio", "Tipo", "Marca", "Modelo", "Status", "Localização", "Setor"]
-
     col_widths = [25, 25, 25, 30, 20, 35, 25]
 
     # Cabeçalho da tabela
@@ -558,18 +560,22 @@ def gerar_relatorio_inventario_pdf(df_inventario):
         pdf.cell(col_widths[6], 8, str(row["setor"]), border=1, ln=0)
         pdf.ln(8)
 
-    # Gera stream. Podem retornar string, bytes ou um objeto de arquivo
+    # pdf.output(dest="S") pode retornar str, bytes, ou bytearray
     pdf_stream = pdf.output(dest="S")
 
-    # Se for um objeto com getvalue(), extrai
+    # Se tiver getvalue(), chamamos
     if hasattr(pdf_stream, "getvalue"):
         pdf_stream = pdf_stream.getvalue()
 
-    # Se for str, converte para bytes
+    # Se for str, convertemos p/ bytes
     if isinstance(pdf_stream, str):
         pdf_stream = pdf_stream.encode("latin-1")
 
-    # Se ainda não for bytes, tenta converter
+    # Se for bytearray, convertemos p/ bytes
+    if isinstance(pdf_stream, bytearray):
+        pdf_stream = bytes(pdf_stream)
+
+    # Se ainda não for bytes, forçamos
     if not isinstance(pdf_stream, (bytes, bytearray)):
         pdf_stream = bytes(pdf_stream)
 
