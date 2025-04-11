@@ -486,7 +486,7 @@ def dashboard_inventario():
 ###########################
 
 class PDF(FPDF):
-    def __init__(self, orientation="L", unit="mm", format="A4", logo_path="logo.png"):
+    def __init__(self, orientation="L", unit="mm", format="A4", logo_path="infocustec.png"):
         super().__init__(orientation, unit, format)
         self.logo_path = logo_path
 
