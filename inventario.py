@@ -517,7 +517,7 @@ def gerar_relatorio_inventario_pdf(df_inventario):
     """
 
     # Modo Paisagem (L) para dar mais espaço e evitar sobreposição
-    pdf = PDF(orientation="L", format="A4", logo_path="logo.png")
+    pdf = PDF(orientation="L", format="A4", logo_path="infocustec.png")
     pdf.add_page()
     pdf.set_font("Arial", "", 10)
 
