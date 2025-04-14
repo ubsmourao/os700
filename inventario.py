@@ -524,7 +524,7 @@ def gerar_relatorio_inventario_pdf(df_inventario):
     # Ajusta as colunas
     columns = ["numero_patrimonio", "tipo", "marca", "modelo", "status", "localizacao", "setor"]
     headers = ["Patrimônio", "Tipo", "Marca", "Modelo", "Status", "Localização", "Setor"]
-    col_widths = [30, 30, 30, 40, 25, 40, 30]  # Ajuste conforme necessidade
+    col_widths = [40, 40, 40, 40, 40, 40, 40]  # Ajuste conforme necessidade
 
     # Cabeçalho da tabela
     for i, header_text in enumerate(headers):
