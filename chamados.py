@@ -100,7 +100,7 @@ def add_chamado(username, ubs, setor, tipo_defeito, problema, machine=None, patr
         supabase.table("chamados").insert(data).execute()
         
         # Envio de mensagem via WhatsApp para os técnicos
-        message_body = f"Novo chamado aberto: Protocolo {protocolo}. UBS: {ubs}. Problema: {problema}"
+        message_body = f"Novo chamado aberto: Protocolo {protocolo}. UBS: {ubs}. Problema: {tipo_defeito}"
         send_whatsapp_message(message_body)
         
         st.success("Chamado aberto com sucesso!")
