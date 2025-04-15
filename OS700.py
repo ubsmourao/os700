@@ -4,7 +4,6 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta
 import pytz
-
 import streamlit as st
 from streamlit_option_menu import option_menu
 from st_aggrid import AgGrid, GridOptionsBuilder
@@ -14,7 +13,7 @@ from io import BytesIO
 # Define o fuso horário de Fortaleza
 FORTALEZA_TZ = pytz.timezone("America/Fortaleza")
 
-# Importação dos módulos internos (mantidos sem alterações)
+# Importação dos módulos internos
 from autenticacao import authenticate, add_user, is_admin, list_users
 from chamados import (
     add_chamado,
@@ -69,12 +68,18 @@ st.markdown(
     .css-1waiswl {
       background-color: #0275d8 !important; /* Azul do menu selecionado */
     }
+    .ag-theme-alpine .ag-header-cell {
+      font-size: 14px;
+    }
+    .ag-theme-alpine .ag-header-cell-label {
+      font-weight: bold;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# Carrega (se existir) o logotipo
+# Carrega o logotipo
 logo_path = os.getenv("LOGO_PATH", "infocustec.png")
 if os.path.exists(logo_path):
     st.image(logo_path, width=300)
@@ -83,9 +88,9 @@ else:
 
 st.title("Gestão de Parque de Informática - UBS ITAPIPOCA")
 
-####################################
+#######################################
 # Função Auxiliar para Exibir Chamado
-####################################
+#######################################
 def exibir_chamado(chamado):
     st.markdown("### Detalhes do Chamado")
     col1, col2 = st.columns(2)
@@ -104,9 +109,9 @@ def exibir_chamado(chamado):
         st.markdown("### Solução")
         st.markdown(chamado["solucao"])
 
-####################################
+#######################################
 # Monta o Menu Principal
-####################################
+#######################################
 def build_menu():
     if st.session_state["logged_in"]:
         if is_admin(st.session_state["username"]):
@@ -143,18 +148,7 @@ menu_options = build_menu()
 selected = option_menu(
     menu_title=None,
     options=menu_options,
-    icons=[
-        "speedometer",  # Dashboard
-        "chat-left-text",  # Abrir Chamado
-        "search",           # Buscar Chamado
-        "card-list",        # Chamados Técnicos
-        "clipboard-data",   # Inventário
-        "box-seam",         # Estoque
-        "gear",             # Administração
-        "bar-chart-line",   # Relatórios
-        "download",         # Exportar Dados
-        "box-arrow-right"   # Sair
-    ],
+    icons=["speedometer", "chat-left-text", "search", "card-list", "clipboard-data", "box-seam", "gear", "bar-chart-line", "download", "box-arrow-right"],
     menu_icon="cast",
     default_index=0,
     orientation="horizontal",
@@ -166,9 +160,9 @@ selected = option_menu(
     }
 )
 
-####################################
-# 1) Página de Login
-####################################
+#######################################
+# Página de Login
+#######################################
 def login_page():
     st.subheader("Login")
     username = st.text_input("Usuário")
@@ -183,9 +177,9 @@ def login_page():
         else:
             st.error("Usuário ou senha incorretos.")
 
-####################################
-# 2) Página de Dashboard (Tendência Mensal e Semanal)
-####################################
+#######################################
+# Página de Dashboard
+#######################################
 def dashboard_page():
     st.subheader("Dashboard - Administrativo")
     agora_fortaleza = datetime.now(FORTALEZA_TZ)
@@ -207,7 +201,7 @@ def dashboard_page():
     col2.metric("Em Aberto", abertos)
     col3.metric("Fechados", fechados)
 
-    # Identifica chamados atrasados (mais de 48h úteis)
+    # Identifica chamados atrasados
     atrasados = []
     for c in chamados:
         if c.get("hora_fechamento") is None:
@@ -229,35 +223,28 @@ def dashboard_page():
     if not tendencia_mensal.empty:
         fig_mensal = px.line(tendencia_mensal, x="mes", y="qtd_mensal", markers=True, title="Chamados por Mês")
         st.plotly_chart(fig_mensal, use_container_width=True)
-    else:
-        st.info("Sem dados suficientes para exibir tendência mensal.")
 
     # Tendência Semanal
     df["semana"] = df["hora_abertura_dt"].dt.to_period("W").astype(str)
     tendencia_semanal = df.groupby("semana").size().reset_index(name="qtd_semanal")
-
-    # Para ordenar corretamente no eixo X (semana = '2023-23' etc.), criamos col auxiliar "ano_semana"
-    def parse_ano_semana(semana_str):
-        # '2023-23' -> (2023, 23)
-        # Se der erro, retorna (9999, 9999) p/ não travar
-        try:
-            ano, wk = semana_str.split("-")
-            return (int(ano), int(wk))
-        except:
-            return (9999, 9999)
-
     tendencia_semanal["ano_semana"] = tendencia_semanal["semana"].apply(parse_ano_semana)
     tendencia_semanal.sort_values("ano_semana", inplace=True)
     st.markdown("### Tendência de Chamados por Semana")
     if not tendencia_semanal.empty:
         fig_semanal = px.line(tendencia_semanal, x="semana", y="qtd_semanal", markers=True, title="Chamados por Semana")
         st.plotly_chart(fig_semanal, use_container_width=True)
-    else:
-        st.info("Sem dados suficientes para exibir tendência semanal.")
 
-####################################
-# 3) Página de Abrir Chamado
-####################################
+# Função auxiliar para processamento de semana
+def parse_ano_semana(semana_str):
+    try:
+        ano, wk = semana_str.split("-")
+        return (int(ano), int(wk))
+    except:
+        return (9999, 9999)
+
+#######################################
+# 1) Página de Abrir Chamado
+#######################################
 def abrir_chamado_page():
     st.subheader("Abrir Chamado Técnico")
     patrimonio = st.text_input("Número de Patrimônio (opcional)")
@@ -315,9 +302,9 @@ def abrir_chamado_page():
         else:
             st.error("Erro ao abrir chamado.")
 
-####################################
-# 4) Página de Buscar Chamado
-####################################
+#######################################
+# 2) Página de Buscar Chamado
+#######################################
 def buscar_chamado_page():
     st.subheader("Buscar Chamado")
     protocolo = st.text_input("Informe o número de protocolo do chamado")
@@ -332,9 +319,9 @@ def buscar_chamado_page():
         else:
             st.warning("Informe um protocolo.")
 
-####################################
-# 5) Página de Chamados Técnicos (Finalizar e Reabrir)
-####################################
+#######################################
+# 3) Página de Chamados Técnicos (Finalizar e Reabrir)
+#######################################
 def chamados_tecnicos_page():
     st.subheader("Chamados Técnicos")
     chamados = list_chamados()
@@ -430,9 +417,9 @@ def chamados_tecnicos_page():
         if st.button("Reabrir Chamado"):
             reabrir_chamado(chamado_fechado_id, remover_historico=remover_hist)
 
-####################################
-# 6) Página de Inventário
-####################################
+#######################################
+# 4) Página de Inventário
+#######################################
 def inventario_page():
     st.subheader("Inventário")
     menu_inventario = st.radio("Selecione uma opção:", ["Listar Inventário", "Cadastrar Máquina", "Dashboard Inventário"])
@@ -443,15 +430,15 @@ def inventario_page():
     else:
         dashboard_inventario()
 
-####################################
-# 7) Página de Estoque
-####################################
+#######################################
+# 5) Página de Estoque
+#######################################
 def estoque_page():
     manage_estoque()
 
-####################################
-# 8) Página de Administração
-####################################
+#######################################
+# 6) Página de Administração
+#######################################
 def administracao_page():
     st.subheader("Administração")
     admin_option = st.selectbox(
@@ -480,9 +467,9 @@ def administracao_page():
         else:
             st.write("Nenhum usuário cadastrado.")
 
-####################################
-# 9) Página de Relatórios
-####################################
+#######################################
+# 7) Página de Relatórios
+#######################################
 def relatorios_page():
     st.subheader("Relatórios Completos - Estatísticas")
     st.markdown("### Filtros para Chamados")
@@ -621,9 +608,9 @@ def relatorios_page():
             mime="application/pdf"
         )
 
-####################################
-# 10) Página de Exportar Dados
-####################################
+#######################################
+# 8) Página de Exportar Dados
+#######################################
 def exportar_dados_page():
     st.subheader("Exportar Dados")
     st.markdown("### Exportar Chamados em CSV")
@@ -644,17 +631,17 @@ def exportar_dados_page():
     else:
         st.write("Nenhum item de inventário para exportar.")
 
-####################################
-# 11) Função Sair
-####################################
+#######################################
+# 9) Função Sair
+#######################################
 def sair_page():
     st.session_state["logged_in"] = False
     st.session_state["username"] = ""
     st.success("Você saiu.")
 
-####################################
+#######################################
 # Mapeamento das Páginas
-####################################
+#######################################
 pages = {
     "Login": login_page,
     "Dashboard": dashboard_page,
@@ -674,7 +661,3 @@ if selected in pages:
     pages[selected]()
 else:
     st.write("Página não encontrada.")
-
-# Rodapé
-st.markdown("---")
-st.markdown("<center>© 2025 Infocustec. Todos os direitos reservados.</center>", unsafe_allow_html=True)
