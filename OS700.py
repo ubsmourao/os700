@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 import pytz
 
 import streamlit as st
-st.write("Streamlit version:", st.__version__)
 from streamlit_option_menu import option_menu
 from st_aggrid import AgGrid, GridOptionsBuilder
 from fpdf import FPDF
