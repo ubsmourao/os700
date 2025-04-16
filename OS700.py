@@ -372,7 +372,7 @@ def chamados_tecnicos_page():
         df = df[cols]
 
     gb = GridOptionsBuilder.from_dataframe(df)
-    gb.configure_default_column(filter=True, sortable=True, resizable=True, wrapText=True, autoHeight=True, minColumnWidth=150, flex=1)
+    gb.configure_default_column(filter=True, sortable=True, resizable=True, wrapText=True, autoHeight=True, minColumnWidth=300, flex=1)
     gb.configure_pagination(paginationAutoPageSize=True)
     grid_options = gb.build()
     grid_options['domLayout'] = 'autoHeight'
