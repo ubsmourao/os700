@@ -124,14 +124,8 @@ def build_menu():
             ]
         else:
             return [
-                "Dashboard",
                 "Abrir Chamado",
                 "Buscar Chamado",
-                "Chamados Técnicos",
-                "Inventário",
-                "Estoque",
-                "Relatórios",
-                "Exportar Dados",
                 "Sair"
             ]
     else:
