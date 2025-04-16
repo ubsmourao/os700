@@ -372,10 +372,10 @@ def chamados_tecnicos_page():
         df = df[cols]
 
     gb = GridOptionsBuilder.from_dataframe(df)
-    gb.configure_default_column(filter=True, sortable=True, resizable=True, wrapText=True, autoHeight=True, minColumnWidth=300, flex=1)
-    gb.configure_pagination(paginationAutoPageSize=True)
+    gb.configure_default_column(filter=True, sortable=True, resizable=True, wrapText=True, autoHeight=True, minColumnWidth=150, flex=1)
+    gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=10)
     grid_options = gb.build()
-    grid_options['domLayout'] = 'autoHeight'
+    grid_options['domLayout'] = 'Normal'
     AgGrid(df, gridOptions=grid_options, enable_enterprise_modules=False, fit_columns_on_grid_load=True, theme='streamlit', height=400)
     
     # Finalizar Chamado (para chamados em aberto)
