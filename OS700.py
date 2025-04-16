@@ -48,7 +48,7 @@ if "username" not in st.session_state:
 # Configuração da página (layout wide, favicon customizado)
 st.set_page_config(
     page_title="Gestão de Parque de Informática",
-    page_icon="gear.png",
+    page_icon="infocustec.png",
     layout="wide"
 )
 
