@@ -2,7 +2,7 @@ streamlit>=1.17.0
 supabase>=2.14.0
 bcrypt>=3.2.0
 pandas>=1.5.3
-streamlit-aggrid==0.4.1
+streamlit-aggrid=0.4.1
 streamlit-option-menu
 matplotlib
 fpdf2
